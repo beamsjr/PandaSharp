@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.Viz</RootNamespace>
+    <PackageId>PandaSharp.Viz</PackageId>
+    <Description>Interactive Plotly.js visualizations for PandaSharp DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>visualization;charts;plotly;dataframe;interactive</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PuppeteerSharp" Version="24.40.0" />
+  </ItemGroup>
+
+</Project>

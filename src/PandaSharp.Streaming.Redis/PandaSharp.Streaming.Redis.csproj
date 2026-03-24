@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.Streaming.Redis</RootNamespace>
+    <PackageId>PandaSharp.Streaming.Redis</PackageId>
+    <Description>Redis Streams integration for PandaSharp Streaming</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp.Streaming\PandaSharp.Streaming.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.*" />
+  </ItemGroup>
+
+</Project>

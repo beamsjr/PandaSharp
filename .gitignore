@@ -1,0 +1,34 @@
+## Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+## IDE
+*.user
+*.suo
+.vs/
+.idea/
+*.DotSettings.user
+.vscode/
+
+## Test
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+## NuGet
+*.nupkg
+packages/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Temp
+viz_output/
+pandasharp_spill_*
+~$*
+.claude/
+*.lock
+~$*
+.~lock.*

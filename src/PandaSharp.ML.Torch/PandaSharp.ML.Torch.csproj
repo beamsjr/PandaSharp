@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.ML.Torch</RootNamespace>
+    <PackageId>PandaSharp.ML.Torch</PackageId>
+    <Description>TorchSharp tensor bridge for PandaSharp DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TorchSharp" Version="0.103.*" />
+  </ItemGroup>
+
+</Project>

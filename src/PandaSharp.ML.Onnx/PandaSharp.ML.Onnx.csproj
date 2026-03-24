@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.ML.Onnx</RootNamespace>
+    <PackageId>PandaSharp.ML.Onnx</PackageId>
+    <Description>ONNX Runtime inference bridge for PandaSharp DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.*" />
+  </ItemGroup>
+
+</Project>

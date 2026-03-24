@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.Cloud</RootNamespace>
+    <PackageId>PandaSharp.Cloud</PackageId>
+    <Description>Cloud storage adapters for PandaSharp — read/write DataFrames from S3, Azure Blob, and GCS</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.*" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.*" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.*" />
+  </ItemGroup>
+
+</Project>

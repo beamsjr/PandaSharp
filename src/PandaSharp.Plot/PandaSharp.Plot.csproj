@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.Plot</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <PackageReference Include="ScottPlot" Version="5.*" />
+  </ItemGroup>
+
+</Project>

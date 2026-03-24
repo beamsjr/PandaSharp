@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.IO.Database\PandaSharp.IO.Database.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.Geo\PandaSharp.Geo.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.*" />
+  </ItemGroup>
+
+</Project>

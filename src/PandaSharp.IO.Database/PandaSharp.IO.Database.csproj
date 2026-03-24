@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.IO.Database</RootNamespace>
+    <PackageId>PandaSharp.IO.Database</PackageId>
+    <Description>Database integration with expression push-down SQL generation for PandaSharp</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+  </ItemGroup>
+
+
+</Project>
