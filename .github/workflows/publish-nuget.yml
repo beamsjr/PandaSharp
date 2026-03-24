@@ -1,0 +1,80 @@
+name: Publish NuGet Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release /p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Test
+        run: |
+          dotnet test tests/PandaSharp.Tests.Unit --no-build -c Release
+          dotnet test tests/PandaSharp.IO.Database.Tests --no-build -c Release
+          dotnet test tests/PandaSharp.ML.Tests --no-build -c Release
+          dotnet test tests/PandaSharp.Streaming.Tests --no-build -c Release
+          dotnet test tests/PandaSharp.Geo.Tests --no-build -c Release
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack src/PandaSharp/PandaSharp.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.ML/PandaSharp.ML.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.ML.MLNet/PandaSharp.ML.MLNet.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.ML.Torch/PandaSharp.ML.Torch.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.ML.Onnx/PandaSharp.ML.Onnx.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.IO.Database/PandaSharp.IO.Database.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Viz/PandaSharp.Viz.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Plot/PandaSharp.Plot.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Interactive/PandaSharp.Interactive.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Streaming/PandaSharp.Streaming.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Streaming.Kafka/PandaSharp.Streaming.Kafka.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Streaming.Redis/PandaSharp.Streaming.Redis.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Geo/PandaSharp.Geo.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Cloud/PandaSharp.Cloud.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Flight/PandaSharp.Flight.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+
+      - name: List packages
+        run: ls -la ./nupkgs/
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Upload packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./nupkgs/*.nupkg
