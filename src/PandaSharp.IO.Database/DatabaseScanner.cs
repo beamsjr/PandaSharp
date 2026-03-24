@@ -15,7 +15,9 @@ public class DatabaseScanner
     private readonly DbConnection _connection;
     private readonly string _tableName;
     private readonly SqlDialect _dialect;
+#pragma warning disable CS0414 // reserved for future Dispose pattern
     private readonly bool _ownsConnection;
+#pragma warning restore CS0414
 
     public DatabaseScanner(DbConnection connection, string tableName, SqlDialect? dialect = null)
     {

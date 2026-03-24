@@ -363,7 +363,7 @@ public class VizBuilder
                         ["method"] = "animate",
                         ["args"] = new object?[]
                         {
-                            new object[] { null },
+                            new object?[] { null },
                             new Dictionary<string, object?>
                             {
                                 ["mode"] = "immediate",
