@@ -32,3 +32,5 @@ pandasharp_spill_*
 *.lock
 ~$*
 .~lock.*
+*.docx
+*.xlsx
