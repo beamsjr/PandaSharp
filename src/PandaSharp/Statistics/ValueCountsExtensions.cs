@@ -9,9 +9,33 @@ public static class ValueCountsExtensions
     /// </summary>
     public static DataFrame ValueCounts(this IColumn column)
     {
+        // Fast path: StringColumn with dict encoding
+        if (column is StringColumn sc)
+        {
+            var (codes, uniques) = sc.GetDictCodes();
+            var countArr = new int[uniques.Length];
+            for (int i = 0; i < codes.Length; i++) countArr[codes[i]]++;
+
+            // Sort by count descending
+            var order = Enumerable.Range(0, uniques.Length).ToArray();
+            Array.Sort(order, (a, b) => countArr[b].CompareTo(countArr[a]));
+
+            var sortedNames = new string?[uniques.Length];
+            var sortedCounts = new int[uniques.Length];
+            for (int i = 0; i < order.Length; i++)
+            {
+                sortedNames[i] = uniques[order[i]];
+                sortedCounts[i] = countArr[order[i]];
+            }
+
+            return new DataFrame(
+                new StringColumn(column.Name, sortedNames),
+                new Column<int>("count", sortedCounts));
+        }
+
+        // Generic path
         var counts = new Dictionary<object, int>();
         int nullCount = 0;
-
         for (int i = 0; i < column.Length; i++)
         {
             var val = column.GetObject(i);
@@ -20,7 +44,6 @@ public static class ValueCountsExtensions
         }
 
         var sorted = counts.OrderByDescending(kv => kv.Value).ToList();
-
         var valueStrings = sorted.Select(kv => kv.Key.ToString()).ToArray();
         var countValues = sorted.Select(kv => kv.Value).ToArray();
 
@@ -32,8 +55,7 @@ public static class ValueCountsExtensions
 
         return new DataFrame(
             new StringColumn(column.Name, valueStrings),
-            new Column<int>("count", countValues)
-        );
+            new Column<int>("count", countValues));
     }
 
     /// <summary>
@@ -41,6 +63,14 @@ public static class ValueCountsExtensions
     /// </summary>
     public static int NUnique(this IColumn column)
     {
+        // Fast path: StringColumn with dict encoding
+        if (column is StringColumn sc)
+        {
+            var (_, uniques) = sc.GetDictCodes();
+            // Subtract 1 if nulls are encoded as "" (dict encoding maps null → "")
+            return sc.NullCount > 0 ? uniques.Length - 1 : uniques.Length;
+        }
+
         var unique = new HashSet<object>();
         for (int i = 0; i < column.Length; i++)
         {

@@ -11,9 +11,26 @@ public class StringColumn : IColumn
     private readonly string?[] _values;
 
     /// <summary>
-    /// Vectorized string operations accessor.
+    /// Vectorized string operations accessor. Reuses cached dict encoding.
     /// </summary>
-    public StringAccessor Str => new(this);
+    public StringAccessor Str => new(this, _cachedDict);
+
+    internal DictEncoding? _cachedDict;
+
+    /// <summary>Cache dict encoding for reuse across multiple Str operations.</summary>
+    internal void CacheDictEncoding(DictEncoding dict) => _cachedDict = dict;
+
+    /// <summary>
+    /// Get dictionary-encoded group IDs and unique values.
+    /// Each row maps to an int code (0..K-1) where K is the number of unique values.
+    /// Reuses cached encoding from Str operations if available.
+    /// </summary>
+    public (int[] Codes, string[] Uniques) GetDictCodes()
+    {
+        var dict = _cachedDict ?? DictEncoding.Encode(this);
+        _cachedDict = dict;
+        return (dict.Codes, dict.Uniques);
+    }
 
     public string Name { get; }
     public Type DataType => typeof(string);
@@ -37,6 +54,15 @@ public class StringColumn : IColumn
     internal static StringColumn CreateOwned(string name, string?[] values)
     {
         return new StringColumn(name, values, nullCount: CountNulls(values));
+    }
+
+    /// <summary>
+    /// Internal factory for arrays known to have no nulls (e.g., dict-encoded transforms).
+    /// Skips the O(N) null counting pass.
+    /// </summary>
+    internal static StringColumn CreateOwnedNoNulls(string name, string?[] values)
+    {
+        return new StringColumn(name, values, nullCount: 0);
     }
 
     private StringColumn(string name, string?[] values, int nullCount)
@@ -116,4 +142,63 @@ public class StringColumn : IColumn
 
     /// <summary>Returns a copy of the backing array for mutation.</summary>
     internal string?[] GetOwnedCopy() => (string?[])_values.Clone();
+
+    // ── Packed byte buffer for native bulk operations ──
+
+    private byte[]? _packedBytes;
+    private int[]? _packedOffsets;
+    private int[]? _packedLengths;
+
+    /// <summary>
+    /// Get or build a contiguous ASCII byte buffer containing all strings.
+    /// Enables single-call native C string operations without per-string marshalling.
+    /// </summary>
+    internal (byte[] Bytes, int[] Offsets, int[] Lengths) GetPackedBuffer()
+    {
+        if (_packedBytes is not null)
+            return (_packedBytes, _packedOffsets!, _packedLengths!);
+
+        _packedOffsets = new int[Length];
+        _packedLengths = new int[Length];
+        int total = 0;
+        for (int i = 0; i < Length; i++)
+        {
+            _packedOffsets[i] = total;
+            _packedLengths[i] = _values[i]?.Length ?? 0;
+            total += _packedLengths[i];
+        }
+
+        _packedBytes = new byte[total];
+        for (int i = 0; i < Length; i++)
+        {
+            if (_values[i] is not null)
+                System.Text.Encoding.ASCII.GetBytes(_values[i]!, 0, _packedLengths[i], _packedBytes, _packedOffsets[i]);
+        }
+
+        return (_packedBytes, _packedOffsets, _packedLengths);
+    }
+
+    /// <summary>
+    /// Apply a native byte-level transform (upper/lower) on the packed buffer.
+    /// Returns a new StringColumn with transformed strings — one native call for ALL strings.
+    /// </summary>
+    internal StringColumn ApplyPackedTransform(Action<IntPtr, IntPtr, int> nativeOp)
+    {
+        var (bytes, offsets, lengths) = GetPackedBuffer();
+        var outBytes = new byte[bytes.Length];
+
+        unsafe
+        {
+            fixed (byte* pIn = bytes, pOut = outBytes)
+                nativeOp((IntPtr)pIn, (IntPtr)pOut, bytes.Length);
+        }
+
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+        {
+            if (_values[i] is null) { result[i] = null; continue; }
+            result[i] = System.Text.Encoding.ASCII.GetString(outBytes, offsets[i], lengths[i]);
+        }
+        return CreateOwned(Name, result);
+    }
 }

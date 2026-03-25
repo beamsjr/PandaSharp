@@ -35,6 +35,46 @@ public class DataFrameUtilityTests
         df.DropDuplicates().RowCount.Should().Be(3);
     }
 
+    [Fact]
+    public void DropDuplicates_TwoStringColumns_ParallelDictEncoding()
+    {
+        var df = new DataFrame(
+            new StringColumn("City", ["NYC", "LA", "NYC", "LA", "NYC", "Chicago"]),
+            new StringColumn("Dept", ["Sales", "Eng", "Eng", "Eng", "Sales", "Sales"]),
+            new Column<int>("Val", [1, 2, 3, 4, 5, 6])
+        );
+
+        var result = df.DropDuplicates("City", "Dept");
+
+        // Unique (City, Dept) pairs: (NYC,Sales), (LA,Eng), (NYC,Eng), (Chicago,Sales)
+        result.RowCount.Should().Be(4);
+
+        // Verify first occurrences are kept (rows 0, 1, 2, 5)
+        var cities = result.GetStringColumn("City");
+        var depts = result.GetStringColumn("Dept");
+        var vals = result.GetColumn<int>("Val");
+
+        // Row 0: NYC, Sales, 1
+        cities[0].Should().Be("NYC");
+        depts[0].Should().Be("Sales");
+        vals[0].Should().Be(1);
+
+        // Row 1: LA, Eng, 2
+        cities[1].Should().Be("LA");
+        depts[1].Should().Be("Eng");
+        vals[1].Should().Be(2);
+
+        // Row 2: NYC, Eng, 3 (not row 4 which is NYC, Sales duplicate)
+        cities[2].Should().Be("NYC");
+        depts[2].Should().Be("Eng");
+        vals[2].Should().Be(3);
+
+        // Row 3: Chicago, Sales, 6
+        cities[3].Should().Be("Chicago");
+        depts[3].Should().Be("Sales");
+        vals[3].Should().Be(6);
+    }
+
     // -- RenameColumns --
 
     [Fact]

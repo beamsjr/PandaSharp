@@ -136,4 +136,66 @@ public class StatisticsTests
         cov.GetColumn<double>("B")[1].Should().Be(1.0); // Var(B) = 1
         cov.GetColumn<double>("B")[0].Should().Be(1.0); // Cov(A,B) = 1
     }
+
+    // -- Fast Corr (SIMD path for non-null double columns) --
+
+    [Fact]
+    public void Corr_AllDoubleNonNull_MatchesExpectedValues()
+    {
+        // Create a dataset where correlations are known:
+        // A and B are perfectly correlated (r=1.0)
+        // A and C are perfectly anti-correlated (r=-1.0)
+        var df = new DataFrame(
+            new Column<double>("A", [1.0, 2.0, 3.0, 4.0, 5.0]),
+            new Column<double>("B", [2.0, 4.0, 6.0, 8.0, 10.0]),
+            new Column<double>("C", [10.0, 8.0, 6.0, 4.0, 2.0])
+        );
+
+        var corr = df.Corr();
+
+        // Diagonal should be 1.0
+        corr.GetColumn<double>("A")[0].Should().BeApproximately(1.0, 0.001);
+        corr.GetColumn<double>("B")[1].Should().BeApproximately(1.0, 0.001);
+        corr.GetColumn<double>("C")[2].Should().BeApproximately(1.0, 0.001);
+
+        // A-B: perfectly correlated
+        corr.GetColumn<double>("B")[0].Should().BeApproximately(1.0, 0.001);
+        corr.GetColumn<double>("A")[1].Should().BeApproximately(1.0, 0.001);
+
+        // A-C: perfectly anti-correlated
+        corr.GetColumn<double>("C")[0].Should().BeApproximately(-1.0, 0.001);
+        corr.GetColumn<double>("A")[2].Should().BeApproximately(-1.0, 0.001);
+
+        // B-C: perfectly anti-correlated
+        corr.GetColumn<double>("C")[1].Should().BeApproximately(-1.0, 0.001);
+        corr.GetColumn<double>("B")[2].Should().BeApproximately(-1.0, 0.001);
+
+        // Should have a "column" label column
+        corr.GetStringColumn("column")[0].Should().Be("A");
+        corr.GetStringColumn("column")[1].Should().Be("B");
+        corr.GetStringColumn("column")[2].Should().Be("C");
+    }
+
+    [Fact]
+    public void Corr_MixedIntAndDouble_Works()
+    {
+        // int + double columns: both are numeric and should be included
+        var df = new DataFrame(
+            new Column<int>("IntCol", [1, 2, 3, 4, 5]),
+            new Column<double>("DblCol", [2.0, 4.0, 6.0, 8.0, 10.0])
+        );
+
+        var corr = df.Corr();
+
+        corr.ColumnNames.Should().Contain("IntCol");
+        corr.ColumnNames.Should().Contain("DblCol");
+
+        // Perfectly correlated
+        corr.GetColumn<double>("DblCol")[0].Should().BeApproximately(1.0, 0.001);
+        corr.GetColumn<double>("IntCol")[1].Should().BeApproximately(1.0, 0.001);
+
+        // Diagonal
+        corr.GetColumn<double>("IntCol")[0].Should().BeApproximately(1.0, 0.001);
+        corr.GetColumn<double>("DblCol")[1].Should().BeApproximately(1.0, 0.001);
+    }
 }

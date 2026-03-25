@@ -146,14 +146,35 @@ public class BinaryExpr : Expr
         var leftCol = _left.Evaluate(df);
         var rightCol = _right.Evaluate(df);
 
+        // Typed fast path: both double, no nulls, non-divide → pure array arithmetic
+        if (leftCol is Column<double> ld && rightCol is Column<double> rd &&
+            ld.NullCount == 0 && rd.NullCount == 0 && _op != BinaryOp.Divide)
+        {
+            var ls = ld.Buffer.Span;
+            var rs = rd.Buffer.Span;
+            var result = new double[ls.Length];
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = _op switch
+                {
+                    BinaryOp.Add => ls[i] + rs[i],
+                    BinaryOp.Subtract => ls[i] - rs[i],
+                    BinaryOp.Multiply => ls[i] * rs[i],
+                    _ => 0
+                };
+            }
+            return new Column<double>(Name, result);
+        }
+
+        // Fallback: nullable boxing path
         var leftVals = ToDoubleArray(leftCol);
         var rightVals = ToDoubleArray(rightCol);
-        var result = new double?[leftVals.Length];
+        var nullableResult = new double?[leftVals.Length];
 
-        for (int i = 0; i < result.Length; i++)
+        for (int i = 0; i < nullableResult.Length; i++)
         {
-            if (leftVals[i] is null || rightVals[i] is null) { result[i] = null; continue; }
-            result[i] = _op switch
+            if (leftVals[i] is null || rightVals[i] is null) { nullableResult[i] = null; continue; }
+            nullableResult[i] = _op switch
             {
                 BinaryOp.Add => leftVals[i]!.Value + rightVals[i]!.Value,
                 BinaryOp.Subtract => leftVals[i]!.Value - rightVals[i]!.Value,
@@ -163,12 +184,30 @@ public class BinaryExpr : Expr
             };
         }
 
-        return Column<double>.FromNullable(Name, result);
+        return Column<double>.FromNullable(Name, nullableResult);
     }
 
     private static double?[] ToDoubleArray(IColumn col)
     {
         var result = new double?[col.Length];
+
+        // Typed fast path: avoid boxing
+        if (col is Column<double> dc)
+        {
+            var span = dc.Buffer.Span;
+            for (int i = 0; i < col.Length; i++)
+                result[i] = col.IsNull(i) ? null : span[i];
+            return result;
+        }
+        if (col is Column<int> ic)
+        {
+            var span = ic.Buffer.Span;
+            for (int i = 0; i < col.Length; i++)
+                result[i] = col.IsNull(i) ? null : (double)span[i];
+            return result;
+        }
+
+        // Generic fallback
         for (int i = 0; i < col.Length; i++)
             result[i] = col.IsNull(i) ? null : Convert.ToDouble(col.GetObject(i));
         return result;
@@ -202,15 +241,72 @@ public class ComparisonExpr : Expr
     {
         var leftCol = _left.Evaluate(df);
         var rightCol = _right.Evaluate(df);
-        var result = new bool?[leftCol.Length];
 
+        // Typed fast path: both double, no nulls → zero boxing
+        if (leftCol is Column<double> ld && rightCol is Column<double> rd &&
+            ld.NullCount == 0 && rd.NullCount == 0)
+        {
+            var ls = ld.Buffer.Span;
+            var rs = rd.Buffer.Span;
+            var bools = new bool[ls.Length];
+            for (int i = 0; i < bools.Length; i++)
+            {
+                bools[i] = _op switch
+                {
+                    ComparisonOp.Gt => ls[i] > rs[i],
+                    ComparisonOp.Lt => ls[i] < rs[i],
+                    ComparisonOp.Gte => ls[i] >= rs[i],
+                    ComparisonOp.Lte => ls[i] <= rs[i],
+                    ComparisonOp.Eq => ls[i] == rs[i],
+                    ComparisonOp.Neq => ls[i] != rs[i],
+                    _ => false
+                };
+            }
+            return new Column<bool>(Name, bools);
+        }
+
+        // Typed: double col vs broadcast literal (Column<double> vs Column<int> widened)
+        if (leftCol is Column<double> ld2 && ld2.NullCount == 0 && rightCol.Length == leftCol.Length)
+        {
+            var ls2 = ld2.Buffer.Span;
+            double[]? rs2 = null;
+            if (rightCol is Column<double> rdd && rdd.NullCount == 0)
+                rs2 = rdd.Buffer.Span.ToArray();
+            else if (rightCol is Column<int> ri && ri.NullCount == 0)
+            {
+                rs2 = new double[ri.Length];
+                var riSpan = ri.Buffer.Span;
+                for (int i = 0; i < ri.Length; i++) rs2[i] = riSpan[i];
+            }
+
+            if (rs2 is not null)
+            {
+                var bools = new bool[ls2.Length];
+                for (int i = 0; i < bools.Length; i++)
+                {
+                    bools[i] = _op switch
+                    {
+                        ComparisonOp.Gt => ls2[i] > rs2[i],
+                        ComparisonOp.Lt => ls2[i] < rs2[i],
+                        ComparisonOp.Gte => ls2[i] >= rs2[i],
+                        ComparisonOp.Lte => ls2[i] <= rs2[i],
+                        ComparisonOp.Eq => ls2[i] == rs2[i],
+                        ComparisonOp.Neq => ls2[i] != rs2[i],
+                        _ => false
+                    };
+                }
+                return new Column<bool>(Name, bools);
+            }
+        }
+
+        // Fallback: boxing path
+        var result = new bool?[leftCol.Length];
         for (int i = 0; i < result.Length; i++)
         {
             var lv = leftCol.GetObject(i);
             var rv = rightCol.GetObject(i);
             if (lv is null || rv is null) { result[i] = null; continue; }
 
-            // Convert to double for cross-type numeric comparison
             int cmp;
             if (lv is IConvertible && rv is IConvertible && IsNumeric(lv) && IsNumeric(rv))
                 cmp = Convert.ToDouble(lv).CompareTo(Convert.ToDouble(rv));

@@ -14,27 +14,27 @@ internal class ArrowBackedBuffer<T> where T : struct
     private readonly ArrowBuffer _buffer;
     private readonly int _offset;
     private readonly int _length;
+    // Cached byte[] reference for fast span creation (avoids ArrowBuffer.Span indirection)
+    private readonly byte[]? _rawBytes;
 
     public int Length => _length;
 
     public ArrowBackedBuffer(T[] values)
     {
-        // Wrap the T[] directly via its underlying bytes — avoids a full memcpy.
-        // ArrowBuffer takes ownership of the byte[]. We reinterpret the T[] memory.
         var bytes = new byte[values.Length * Unsafe.SizeOf<T>()];
         MemoryMarshal.AsBytes(values.AsSpan()).CopyTo(bytes);
         _buffer = new ArrowBuffer(bytes);
+        _rawBytes = bytes;
         _offset = 0;
         _length = values.Length;
     }
 
     /// <summary>
     /// Wrap a pre-computed byte array directly as an Arrow buffer. No copy.
-    /// The caller must ensure bytes contains valid T[] data.
     /// </summary>
     internal static ArrowBackedBuffer<T> WrapBytes(byte[] bytes, int length)
     {
-        return new ArrowBackedBuffer<T>(new ArrowBuffer(bytes), 0, length);
+        return new ArrowBackedBuffer<T>(new ArrowBuffer(bytes), 0, length, bytes);
     }
 
     public ArrowBackedBuffer(ArrowBuffer buffer, int offset, int length)
@@ -42,10 +42,33 @@ internal class ArrowBackedBuffer<T> where T : struct
         _buffer = buffer;
         _offset = offset;
         _length = length;
+        _rawBytes = null;
     }
 
-    public ReadOnlySpan<T> Span =>
-        MemoryMarshal.Cast<byte, T>(_buffer.Span).Slice(_offset, _length);
+    private ArrowBackedBuffer(ArrowBuffer buffer, int offset, int length, byte[]? rawBytes)
+    {
+        _buffer = buffer;
+        _offset = offset;
+        _length = length;
+        _rawBytes = rawBytes;
+    }
+
+    public ReadOnlySpan<T> Span
+    {
+        get
+        {
+            // Fast path: direct byte[] access (no ArrowBuffer.Span overhead)
+            if (_rawBytes is not null && _offset == 0)
+                return MemoryMarshal.Cast<byte, T>(_rawBytes.AsSpan(0, _length * Unsafe.SizeOf<T>()));
+            return MemoryMarshal.Cast<byte, T>(_buffer.Span).Slice(_offset, _length);
+        }
+    }
+
+    /// <summary>
+    /// Get the raw backing byte[] for native pinning (no copy).
+    /// Returns null if this is a sliced view without a cached byte[] reference.
+    /// </summary>
+    internal byte[]? RawBytes => _offset == 0 ? _rawBytes : null;
 
     public T this[int index]
     {

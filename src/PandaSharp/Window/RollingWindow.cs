@@ -48,14 +48,27 @@ public class RollingWindow<T> where T : struct, INumber<T>
     private Column<double> RollingMeanFast()
     {
         int n = _column.Length;
+
+        // Native C fast path for double columns (only when minPeriods == windowSize, the default)
+        if (typeof(T) == typeof(double) && Native.NativeOps.IsAvailable && _minPeriods == _windowSize)
+        {
+            var span = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(_column.Buffer.Span);
+            var nativeResult = Native.NativeOps.RollingMean(span, _windowSize);
+            // Convert NaN to null for the first (window-1) elements
+            var nullable = new double?[n];
+            for (int i = 0; i < n; i++)
+                nullable[i] = double.IsNaN(nativeResult[i]) ? null : nativeResult[i];
+            return Column<double>.FromNullable(_column.Name, nullable);
+        }
+
         var result = new double?[n];
-        var span = _column.Buffer.Span;
+        var src = _column.Buffer.Span;
         double sum = 0;
 
         for (int i = 0; i < n; i++)
         {
-            sum += double.CreateChecked(span[i]);
-            if (i >= _windowSize) sum -= double.CreateChecked(span[i - _windowSize]);
+            sum += double.CreateChecked(src[i]);
+            if (i >= _windowSize) sum -= double.CreateChecked(src[i - _windowSize]);
             int windowLen = Math.Min(i + 1, _windowSize);
             result[i] = windowLen >= _minPeriods ? sum / windowLen : null;
         }

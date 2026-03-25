@@ -8,13 +8,18 @@ public static class CrossTabExtensions
     /// <summary>
     /// Compute a cross-tabulation (frequency table) of two columns.
     /// Returns a DataFrame where rows are unique values of col1 and columns are unique values of col2.
+    /// Uses flat array indexing instead of dictionary for O(1) counting.
     /// </summary>
     public static DataFrame CrossTab(this DataFrame df, string rowColumn, string colColumn)
     {
         var rowCol = df[rowColumn];
         var colCol = df[colColumn];
 
-        // Get unique values with O(1) lookup
+        // Typed fast path: both StringColumns
+        if (rowCol is StringColumn rowSc && colCol is StringColumn colSc)
+            return CrossTabString(rowSc, colSc, rowColumn);
+
+        // Fallback: generic path
         var rowValues = GetUnique(rowCol);
         var colValues = GetUnique(colCol);
         var rowMap = new Dictionary<object?, int>(new ObjComparer());
@@ -22,27 +27,79 @@ public static class CrossTabExtensions
         var colMap = new Dictionary<object?, int>(new ObjComparer());
         for (int i = 0; i < colValues.Count; i++) colMap[colValues[i]] = i;
 
-        // Count occurrences
-        var counts = new Dictionary<(int, int), int>();
+        // Flat array counting: counts[ri * colCount + ci]
+        int rowCount = rowValues.Count;
+        int colCount = colValues.Count;
+        var counts = new int[rowCount * colCount];
+
         for (int i = 0; i < df.RowCount; i++)
         {
             var rv = rowCol.GetObject(i);
             var cv = colCol.GetObject(i);
-            if (!rowMap.TryGetValue(rv, out int ri) || !colMap.TryGetValue(cv, out int ci)) continue;
-            var key = (ri, ci);
-            counts[key] = counts.GetValueOrDefault(key) + 1;
+            if (rowMap.TryGetValue(rv, out int ri) && colMap.TryGetValue(cv, out int ci))
+                counts[ri * colCount + ci]++;
         }
 
-        // Build result
         var columns = new List<IColumn>();
         columns.Add(new StringColumn(rowColumn, rowValues.Select(v => v?.ToString()).ToArray()));
 
-        for (int c = 0; c < colValues.Count; c++)
+        for (int c = 0; c < colCount; c++)
         {
-            var vals = new int[rowValues.Count];
-            for (int r = 0; r < rowValues.Count; r++)
-                vals[r] = counts.GetValueOrDefault((r, c));
+            var vals = new int[rowCount];
+            for (int r = 0; r < rowCount; r++)
+                vals[r] = counts[r * colCount + c];
             columns.Add(new Column<int>(colValues[c]?.ToString() ?? "null", vals));
+        }
+
+        return new DataFrame(columns);
+    }
+
+    /// <summary>
+    /// Fast CrossTab for two StringColumns — avoids all boxing.
+    /// </summary>
+    private static DataFrame CrossTabString(StringColumn rowCol, StringColumn colCol, string rowColumnName)
+    {
+        var rowVals = rowCol.GetValues();
+        var colVals = colCol.GetValues();
+        int n = rowCol.Length;
+
+        // Build unique maps with ordinal comparison
+        var rowMap = new Dictionary<string, int>(StringComparer.Ordinal);
+        var rowOrder = new List<string>();
+        var colMap = new Dictionary<string, int>(StringComparer.Ordinal);
+        var colOrder = new List<string>();
+
+        for (int i = 0; i < n; i++)
+        {
+            var rv = rowVals[i] ?? "";
+            var cv = colVals[i] ?? "";
+            if (!rowMap.ContainsKey(rv)) { rowMap[rv] = rowOrder.Count; rowOrder.Add(rv); }
+            if (!colMap.ContainsKey(cv)) { colMap[cv] = colOrder.Count; colOrder.Add(cv); }
+        }
+
+        // Flat array counting
+        int nRowUniques = rowOrder.Count;
+        int nColUniques = colOrder.Count;
+        var counts = new int[nRowUniques * nColUniques];
+
+        for (int i = 0; i < n; i++)
+        {
+            var rv = rowVals[i] ?? "";
+            var cv = colVals[i] ?? "";
+            int ri = rowMap[rv];
+            int ci = colMap[cv];
+            counts[ri * nColUniques + ci]++;
+        }
+
+        var columns = new List<IColumn>();
+        columns.Add(new StringColumn(rowColumnName, rowOrder.Select(s => (string?)s).ToArray()));
+
+        for (int c = 0; c < nColUniques; c++)
+        {
+            var vals = new int[nRowUniques];
+            for (int r = 0; r < nRowUniques; r++)
+                vals[r] = counts[r * nColUniques + c];
+            columns.Add(new Column<int>(colOrder[c], vals));
         }
 
         return new DataFrame(columns);

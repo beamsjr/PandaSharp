@@ -13,6 +13,12 @@ public class Column<T> : IColumn where T : struct
     public string Name { get; }
     public Type DataType => typeof(T);
     public int Length => Buffer.Length;
+
+    /// <summary>
+    /// Get the raw backing byte[] for zero-copy native pinning.
+    /// Returns null if the column is a sliced view.
+    /// </summary>
+    internal byte[]? RawBytes => Buffer.RawBytes;
     public int NullCount => Nulls.NullCount;
 
     public Column(string name, T[] values)

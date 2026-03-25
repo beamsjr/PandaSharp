@@ -11,6 +11,7 @@ public class GroupedDataFrame
     private readonly DataFrame _source;
     private readonly string[] _keyColumns;
     private readonly Dictionary<GroupKey, List<int>> _groups;
+    private List<int>[]? _cachedGroupEntries;
 
     internal GroupedDataFrame(DataFrame source, string[] keyColumns)
     {
@@ -31,6 +32,171 @@ public class GroupedDataFrame
             throw new KeyNotFoundException($"Group '{key}' not found.");
         int[] idx = indices.ToArray();
         return new DataFrame(_source.ColumnNames.Select(name => _source[name].TakeRows(idx)));
+    }
+
+    /// <summary>
+    /// Build a group ID array: maps each row to its group index (0..K-1).
+    /// Enables native C aggregation that processes all groups in a single pass.
+    /// </summary>
+    public (int[] GroupIds, int NumGroups) BuildGroupIdArray()
+    {
+        var groupIds = new int[_source.RowCount];
+        var groupList = _groups.Keys.ToList();
+        var groupMap = new Dictionary<GroupKey, int>(groupList.Count);
+        for (int g = 0; g < groupList.Count; g++)
+            groupMap[groupList[g]] = g;
+
+        foreach (var (key, indices) in _groups)
+        {
+            int gid = groupMap[key];
+            foreach (var idx in indices)
+                groupIds[idx] = gid;
+        }
+        return (groupIds, groupList.Count);
+    }
+
+    /// <summary>
+    /// Get the row indices for a specific group without copying any data.
+    /// Use with source column access for zero-copy per-group operations.
+    /// </summary>
+    public List<int> GetGroupIndices(GroupKey key)
+    {
+        if (!_groups.TryGetValue(key, out var indices))
+            throw new KeyNotFoundException($"Group '{key}' not found.");
+        return indices;
+    }
+
+    /// <summary>
+    /// Extract a typed column's values for a group without creating a sub-DataFrame.
+    /// Much faster than GetGroup(key).GetColumn&lt;T&gt;(name) for per-group operations.
+    /// </summary>
+    public double[] GetGroupDoubles(GroupKey key, string columnName)
+    {
+        var indices = GetGroupIndices(key);
+        var col = _source[columnName];
+
+        if (col is Column.Column<double> dc)
+        {
+            var span = dc.Buffer.Span;
+            var result = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                result[i] = span[indices[i]];
+            return result;
+        }
+
+        // Fallback with conversion
+        var fallback = new double[indices.Count];
+        for (int i = 0; i < indices.Count; i++)
+            fallback[i] = Convert.ToDouble(col.GetObject(indices[i]) ?? 0);
+        return fallback;
+    }
+
+    /// <summary>
+    /// Apply a function to each group's typed column values without copying full DataFrames.
+    /// Returns results scattered back to original row positions.
+    /// This is the zero-copy equivalent of pandas groupby().transform().
+    /// </summary>
+    /// <summary>
+    /// TransformDouble with pre-copied data array. Avoids repeated 118MB copies
+    /// when multiple transforms operate on the same column.
+    /// </summary>
+    private List<int>[] GetGroupEntries()
+    {
+        return _cachedGroupEntries ??= _groups.Values.ToArray();
+    }
+
+    /// <summary>
+    /// Fused multi-transform: apply multiple functions in a single parallel pass.
+    /// Extracts group data once, runs all transforms, scatters all results.
+    /// Saves one full gather+scatter pass per additional function.
+    /// </summary>
+    public (Column.Column<double>, Column.Column<double>) TransformDoubleMulti(
+        string columnName, double[] data,
+        Func<double[], double[]> func1, Func<double[], double[]> func2)
+    {
+        int n = _source.RowCount;
+        var result1 = new double[n];
+        var result2 = new double[n];
+        var groupEntries = GetGroupEntries();
+        Parallel.For(0, groupEntries.Length, gi =>
+        {
+            var indices = groupEntries[gi];
+            // Single gather
+            var groupVals = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                groupVals[i] = data[indices[i]];
+            // Both transforms on same extracted data
+            var t1 = func1(groupVals);
+            var t2 = func2(groupVals);
+            // Dual scatter
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int idx = indices[i];
+                result1[idx] = t1[i];
+                result2[idx] = t2[i];
+            }
+        });
+        return (new Column.Column<double>(columnName, result1),
+                new Column.Column<double>(columnName, result2));
+    }
+
+    public Column.Column<double> TransformDoublePreCopied(string columnName, double[] data, Func<double[], double[]> func)
+    {
+        int n = _source.RowCount;
+        var result = new double[n];
+        var groupEntries = GetGroupEntries();
+        Parallel.For(0, groupEntries.Length, gi =>
+        {
+            var indices = groupEntries[gi];
+            var groupVals = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                groupVals[i] = data[indices[i]];
+            var transformed = func(groupVals);
+            for (int i = 0; i < indices.Count; i++)
+                result[indices[i]] = transformed[i];
+        });
+        return new Column.Column<double>(columnName, result);
+    }
+
+    public Column.Column<double> TransformDouble(string columnName, Func<double[], double[]> func)
+    {
+        var result = new double[_source.RowCount];
+        var col = _source[columnName];
+
+        if (col is Column.Column<double> dc)
+        {
+            var data = dc.Buffer.Span.ToArray(); // single copy for thread-safe parallel access
+            var groupEntries = GetGroupEntries();
+
+            // Process groups in parallel — each group writes to non-overlapping indices
+            Parallel.For(0, groupEntries.Length, gi =>
+            {
+                var indices = groupEntries[gi];
+                var groupVals = new double[indices.Count];
+                for (int i = 0; i < indices.Count; i++)
+                    groupVals[i] = data[indices[i]];
+
+                var transformed = func(groupVals);
+
+                for (int i = 0; i < indices.Count; i++)
+                    result[indices[i]] = transformed[i];
+            });
+        }
+        else
+        {
+            foreach (var (_, indices) in _groups)
+            {
+                var groupVals = new double[indices.Count];
+                for (int i = 0; i < indices.Count; i++)
+                    groupVals[i] = Convert.ToDouble(col.GetObject(indices[i]) ?? 0);
+
+                var transformed = func(groupVals);
+                for (int i = 0; i < indices.Count; i++)
+                    result[indices[i]] = transformed[i];
+            }
+        }
+
+        return new Column.Column<double>(columnName, result);
     }
 
     // -- Built-in aggregates that return a single DataFrame --
@@ -269,10 +435,22 @@ public class GroupedDataFrame
 
     private Dictionary<GroupKey, List<int>> BuildGroups()
     {
+        // Fast path: single string key column — avoid all boxing
+        if (_keyColumns.Length == 1 && _source[_keyColumns[0]] is Column.StringColumn sc)
+            return BuildStringGroups(sc);
+
+        // Fast path: single int key column
+        if (_keyColumns.Length == 1 && _source[_keyColumns[0]] is Column.Column<int> ic)
+            return BuildIntGroups(ic);
+
+        // Fast path: 2 string key columns — dict-encode both, composite int key
+        if (_keyColumns.Length == 2 &&
+            _source[_keyColumns[0]] is Column.StringColumn sc2a &&
+            _source[_keyColumns[1]] is Column.StringColumn sc2b)
+            return Build2StringGroups(sc2a, sc2b);
+
         var groups = new Dictionary<GroupKey, List<int>>();
         var keyCols = _keyColumns.Select(k => _source[k]).ToArray();
-
-        // Reuse a single array for key extraction, copy only when creating new groups
         var keyBuffer = new object?[keyCols.Length];
 
         for (int r = 0; r < _source.RowCount; r++)
@@ -287,13 +465,106 @@ public class GroupedDataFrame
             }
             else
             {
-                // Only allocate a new key array when we find a new group
                 var ownedKey = new GroupKey((object?[])keyBuffer.Clone());
                 list = new List<int> { r };
                 groups[ownedKey] = list;
             }
         }
 
+        return groups;
+    }
+
+    private Dictionary<GroupKey, List<int>> BuildStringGroups(Column.StringColumn col)
+    {
+        // Fast path: use cached dict codes (int lookups instead of string hashing)
+        if (col._cachedDict is { } dict)
+        {
+            var codes = dict.Codes;
+            var uniques = dict.Uniques;
+            int nGroups = uniques.Length;
+            // Pre-allocate lists with estimated size
+            var groupLists = new List<int>[nGroups];
+            int avgSize = _source.RowCount / nGroups;
+            for (int g = 0; g < nGroups; g++)
+                groupLists[g] = new List<int>(avgSize + avgSize / 4);
+            for (int r = 0; r < _source.RowCount; r++)
+                groupLists[codes[r]].Add(r);
+            var result = new Dictionary<GroupKey, List<int>>(nGroups);
+            for (int g = 0; g < nGroups; g++)
+                result[new GroupKey(new object?[] { uniques[g] })] = groupLists[g];
+            return result;
+        }
+
+        var vals = col.GetValues();
+        var stringMap = new Dictionary<string, List<int>>(_source.RowCount / 100, StringComparer.Ordinal);
+
+        for (int r = 0; r < _source.RowCount; r++)
+        {
+            var key = vals[r] ?? "";
+            if (!stringMap.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                stringMap[key] = list;
+            }
+            list.Add(r);
+        }
+
+        var groups = new Dictionary<GroupKey, List<int>>(stringMap.Count);
+        foreach (var (key, list) in stringMap)
+            groups[new GroupKey(new object?[] { key })] = list;
+        return groups;
+    }
+
+    private Dictionary<GroupKey, List<int>> Build2StringGroups(Column.StringColumn col1, Column.StringColumn col2)
+    {
+        // Dict-encode both columns → composite int key (code1, code2)
+        var dict1 = DictEncoding.Encode(col1);
+        var dict2 = DictEncoding.Encode(col2);
+        var codes1 = dict1.Codes;
+        var codes2 = dict2.Codes;
+        int n2 = dict2.Uniques.Length;
+
+        var compositeMap = new Dictionary<long, List<int>>(_source.RowCount / 100);
+        for (int r = 0; r < _source.RowCount; r++)
+        {
+            long key = (long)codes1[r] * n2 + codes2[r];
+            if (!compositeMap.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                compositeMap[key] = list;
+            }
+            list.Add(r);
+        }
+
+        var groups = new Dictionary<GroupKey, List<int>>(compositeMap.Count);
+        foreach (var (compositeKey, list) in compositeMap)
+        {
+            int c1 = (int)(compositeKey / n2);
+            int c2 = (int)(compositeKey % n2);
+            groups[new GroupKey(new object?[] { dict1.Uniques[c1], dict2.Uniques[c2] })] = list;
+        }
+        return groups;
+    }
+
+    private Dictionary<GroupKey, List<int>> BuildIntGroups(Column.Column<int> col)
+    {
+        var span = col.Buffer.Span;
+        var intMap = new Dictionary<int, List<int>>();
+
+        for (int r = 0; r < _source.RowCount; r++)
+        {
+            var key = span[r];
+            if (!intMap.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                intMap[key] = list;
+            }
+            list.Add(r);
+        }
+
+        var groups = new Dictionary<GroupKey, List<int>>(intMap.Count);
+        foreach (var (key, list) in intMap)
+            groups[new GroupKey(new object?[] { key })] = list;
         return groups;
     }
 
@@ -324,12 +595,33 @@ public class GroupedDataFrame
         var groupKeys = _groups.Keys.ToList();
         var columns = new List<IColumn>();
 
-        // Key columns
-        foreach (var keyCol in _keyColumns)
+        // Key columns — typed fast path for single string key
+        if (_keyColumns.Length == 1 && _source[_keyColumns[0]].DataType == typeof(string))
         {
-            var srcCol = _source[keyCol];
-            var keyValues = groupKeys.Select(k => k[Array.IndexOf(_keyColumns, keyCol)]).ToArray();
-            columns.Add(BuildColumnFromObjects(keyCol, srcCol.DataType, keyValues));
+            var keyVals = new string?[groupKeys.Count];
+            for (int g = 0; g < groupKeys.Count; g++)
+                keyVals[g] = groupKeys[g][0] as string;
+            columns.Add(StringColumn.CreateOwned(_keyColumns[0], keyVals));
+        }
+        else
+        {
+            foreach (var keyCol in _keyColumns)
+            {
+                var srcCol = _source[keyCol];
+                int keyIdx = Array.IndexOf(_keyColumns, keyCol);
+                if (srcCol.DataType == typeof(string))
+                {
+                    var keyVals = new string?[groupKeys.Count];
+                    for (int g = 0; g < groupKeys.Count; g++)
+                        keyVals[g] = groupKeys[g][keyIdx] as string;
+                    columns.Add(StringColumn.CreateOwned(keyCol, keyVals));
+                }
+                else
+                {
+                    var keyValues = groupKeys.Select(k => k[keyIdx]).ToArray();
+                    columns.Add(BuildColumnFromObjects(keyCol, srcCol.DataType, keyValues));
+                }
+            }
         }
 
         // Aggregated columns — use typed fast path when possible
@@ -397,6 +689,60 @@ public class GroupedDataFrame
                     foreach (var idx in _groups[groupKeys[g]])
                         if (!iColSum.Nulls.IsNull(idx)) sum += span[idx];
                     vals[g] = sum;
+                }
+                columns.Add(new Column.Column<double>(outputName, vals));
+                continue;
+            }
+
+            // Typed fast path: Min on double
+            if (func == AggFunc.Min && srcCol is Column.Column<double> dColMin)
+            {
+                var vals = new double[groupKeys.Count];
+                var span = dColMin.Buffer.Span;
+                for (int g = 0; g < groupKeys.Count; g++)
+                {
+                    double min = double.MaxValue;
+                    foreach (var idx in _groups[groupKeys[g]])
+                        if (!dColMin.Nulls.IsNull(idx) && span[idx] < min) min = span[idx];
+                    vals[g] = min == double.MaxValue ? double.NaN : min;
+                }
+                columns.Add(new Column.Column<double>(outputName, vals));
+                continue;
+            }
+
+            // Typed fast path: Max on double
+            if (func == AggFunc.Max && srcCol is Column.Column<double> dColMax)
+            {
+                var vals = new double[groupKeys.Count];
+                var span = dColMax.Buffer.Span;
+                for (int g = 0; g < groupKeys.Count; g++)
+                {
+                    double max = double.MinValue;
+                    foreach (var idx in _groups[groupKeys[g]])
+                        if (!dColMax.Nulls.IsNull(idx) && span[idx] > max) max = span[idx];
+                    vals[g] = max == double.MinValue ? double.NaN : max;
+                }
+                columns.Add(new Column.Column<double>(outputName, vals));
+                continue;
+            }
+
+            // Typed fast path: Std on double
+            if (func == AggFunc.Std && srcCol is Column.Column<double> dColStd)
+            {
+                var vals = new double[groupKeys.Count];
+                var span = dColStd.Buffer.Span;
+                for (int g = 0; g < groupKeys.Count; g++)
+                {
+                    var indices = _groups[groupKeys[g]];
+                    double sum = 0; int count = 0;
+                    foreach (var idx in indices)
+                        if (!dColStd.Nulls.IsNull(idx)) { sum += span[idx]; count++; }
+                    if (count <= 1) { vals[g] = 0; continue; }
+                    double mean = sum / count;
+                    double sumSq = 0;
+                    foreach (var idx in indices)
+                        if (!dColStd.Nulls.IsNull(idx)) { double d = span[idx] - mean; sumSq += d * d; }
+                    vals[g] = Math.Sqrt(sumSq / (count - 1));
                 }
                 columns.Add(new Column.Column<double>(outputName, vals));
                 continue;

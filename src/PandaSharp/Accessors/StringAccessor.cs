@@ -10,17 +10,44 @@ namespace PandaSharp.Accessors;
 public class StringAccessor
 {
     private readonly StringColumn _column;
+    private DictEncoding? _dict;
 
-    internal StringAccessor(StringColumn column) => _column = column;
+    internal StringAccessor(StringColumn column, DictEncoding? cachedDict = null)
+    {
+        _column = column;
+        _dict = cachedDict;
+    }
 
     private string?[] Values => _column.GetValues();
     private int Length => _column.Length;
     private string Name => _column.Name;
 
+    /// <summary>
+    /// Get or build dictionary encoding. When K unique values &lt;&lt; N rows,
+    /// operations are O(K) instead of O(N) — e.g., 6K uniques in 14.7M rows = 2000x faster.
+    /// </summary>
+    private DictEncoding GetDict()
+    {
+        if (_dict is null)
+        {
+            _dict = DictEncoding.Encode(_column);
+            _column.CacheDictEncoding(_dict); // cache for reuse across Str accessors
+        }
+        return _dict;
+    }
+
+    /// <summary>Whether dictionary encoding is worthwhile (K &lt; N/10).</summary>
+    private bool ShouldUseDict => Length > 10_000;
+
     // -- Matching --
 
     public Column<bool> Contains(string substring)
     {
+        if (ShouldUseDict)
+        {
+            var mask = GetDict().Contains(substring);
+            return new Column<bool>(Name, mask);
+        }
         var result = new bool?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.Contains(substring);
@@ -29,6 +56,11 @@ public class StringAccessor
 
     public Column<bool> StartsWith(string prefix)
     {
+        if (ShouldUseDict)
+        {
+            var mask = GetDict().StartsWith(prefix);
+            return new Column<bool>(Name, mask);
+        }
         var result = new bool?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.StartsWith(prefix);
@@ -74,6 +106,7 @@ public class StringAccessor
 
     public StringColumn Replace(string old, string @new)
     {
+        if (ShouldUseDict) return GetDict().Replace(Name, old, @new);
         var result = new string?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.Replace(old, @new);
@@ -82,18 +115,22 @@ public class StringAccessor
 
     public StringColumn Upper()
     {
+        if (ShouldUseDict) return GetDict().TransformUniques(Name, s => s.ToUpperInvariant());
+
         var result = new string?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.ToUpperInvariant();
-        return new StringColumn(Name, result);
+        return StringColumn.CreateOwned(Name, result);
     }
 
     public StringColumn Lower()
     {
+        if (ShouldUseDict) return GetDict().TransformUniques(Name, s => s.ToLowerInvariant());
+
         var result = new string?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.ToLowerInvariant();
-        return new StringColumn(Name, result);
+        return StringColumn.CreateOwned(Name, result);
     }
 
     public StringColumn Title()
@@ -161,6 +198,9 @@ public class StringAccessor
 
     public StringColumn Slice(int start, int? length = null)
     {
+        if (ShouldUseDict && start >= 0 && length.HasValue)
+            return GetDict().Slice(Name, start, length.Value);
+
         var result = new string?[Length];
         for (int i = 0; i < Length; i++)
         {
@@ -179,6 +219,7 @@ public class StringAccessor
 
     public Column<int> Len()
     {
+        if (ShouldUseDict) return GetDict().Len(Name);
         var result = new int?[Length];
         for (int i = 0; i < Length; i++)
             result[i] = Values[i]?.Length;

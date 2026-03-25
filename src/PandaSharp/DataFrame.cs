@@ -186,11 +186,23 @@ public class DataFrame : IEnumerable<DataFrameRow>
         if (count == RowCount)
             return this;
 
-        var idxSpan = indices.AsSpan(0, count);
-        var filtered = new List<Column.IColumn>(_columns.Count);
-        foreach (var col in _columns)
-            filtered.Add(col.TakeRows(idxSpan));
-        return new DataFrame(filtered);
+        var idxArr = indices.AsSpan(0, count).ToArray();
+        // Parallel column filtering for large DataFrames
+        if (_columns.Count > 3 && count > 10_000)
+        {
+            var colArr = _columns.ToArray();
+            var filtered = new Column.IColumn[colArr.Length];
+            Parallel.For(0, colArr.Length, i =>
+                filtered[i] = colArr[i].TakeRows(idxArr));
+            return new DataFrame(filtered);
+        }
+        else
+        {
+            var filtered = new List<Column.IColumn>(_columns.Count);
+            foreach (var col in _columns)
+                filtered.Add(col.TakeRows(idxArr));
+            return new DataFrame(filtered);
+        }
     }
 
     public DataFrame Filter(bool[] mask) => Filter(mask.AsSpan());
@@ -216,6 +228,79 @@ public class DataFrame : IEnumerable<DataFrameRow>
         return Filter(mask);
     }
 
+    /// <summary>Typed filter on a double column — zero boxing.</summary>
+    public DataFrame WhereDouble(string column, Func<double, bool> predicate)
+    {
+        var col = (Column.Column<double>)this[column];
+        var span = col.Buffer.Span;
+        var mask = new bool[RowCount];
+        if (col.NullCount == 0)
+            for (int i = 0; i < RowCount; i++) mask[i] = predicate(span[i]);
+        else
+            for (int i = 0; i < RowCount; i++) mask[i] = !col.Nulls.IsNull(i) && predicate(span[i]);
+        return Filter(mask);
+    }
+
+    /// <summary>Typed filter on an int column — zero boxing.</summary>
+    public DataFrame WhereInt(string column, Func<int, bool> predicate)
+    {
+        var col = (Column.Column<int>)this[column];
+        var span = col.Buffer.Span;
+        var mask = new bool[RowCount];
+        if (col.NullCount == 0)
+            for (int i = 0; i < RowCount; i++) mask[i] = predicate(span[i]);
+        else
+            for (int i = 0; i < RowCount; i++) mask[i] = !col.Nulls.IsNull(i) && predicate(span[i]);
+        return Filter(mask);
+    }
+
+    /// <summary>Typed filter on a string column — zero boxing.</summary>
+    public DataFrame WhereString(string column, Func<string?, bool> predicate)
+    {
+        var col = (Column.StringColumn)this[column];
+        var vals = col.GetValues();
+        var mask = new bool[RowCount];
+        for (int i = 0; i < RowCount; i++) mask[i] = predicate(vals[i]);
+        return Filter(mask);
+    }
+
+    /// <summary>Filter by string set membership — very fast for HashSet lookups.</summary>
+    public DataFrame WhereIn(string column, HashSet<string> values)
+    {
+        var col = this[column];
+        var mask = new bool[RowCount];
+        if (col is Column.StringColumn sc)
+        {
+            var vals = sc.GetValues();
+            for (int i = 0; i < RowCount; i++) mask[i] = vals[i] is not null && values.Contains(vals[i]!);
+        }
+        else
+        {
+            for (int i = 0; i < RowCount; i++)
+            {
+                var v = col.GetObject(i)?.ToString();
+                mask[i] = v is not null && values.Contains(v);
+            }
+        }
+        return Filter(mask);
+    }
+
+    /// <summary>Native-accelerated filter: column > threshold. Uses C for maximum throughput.</summary>
+    public DataFrame NativeFilterGt(string column, double threshold)
+    {
+        if (this[column] is Column.Column<double> dc && dc.NullCount == 0 && Native.NativeOps.IsAvailable)
+            return Filter(Native.NativeOps.FilterGt(dc.Buffer.Span, threshold));
+        return WhereDouble(column, v => v > threshold);
+    }
+
+    /// <summary>Native-accelerated filter: |column| > threshold.</summary>
+    public DataFrame NativeFilterAbsGt(string column, double threshold)
+    {
+        if (this[column] is Column.Column<double> dc && dc.NullCount == 0 && Native.NativeOps.IsAvailable)
+            return Filter(Native.NativeOps.FilterAbsGt(dc.Buffer.Span, threshold));
+        return WhereDouble(column, v => Math.Abs(v) > threshold);
+    }
+
     // -- Sort --
 
     /// <summary>Sort rows by a single column.</summary>
@@ -234,9 +319,20 @@ public class DataFrame : IEnumerable<DataFrameRow>
             SortByKeys(indices, lc.Buffer.Span, ascending);
         else if (col is Column.Column<float> fc && fc.NullCount == 0)
             SortByKeys(indices, fc.Buffer.Span, ascending);
+        else if (col is Column.StringColumn sc2)
+        {
+            // Use dict codes with rank mapping for fast int comparison
+            var (codes, uniques) = sc2.GetDictCodes();
+            var sortOrder = Enumerable.Range(0, uniques.Length).ToArray();
+            Array.Sort(sortOrder, (a, b) => string.Compare(uniques[a], uniques[b], StringComparison.Ordinal));
+            var rank = new int[uniques.Length];
+            for (int r = 0; r < sortOrder.Length; r++) rank[sortOrder[r]] = r;
+            var rankedCodes = new int[codes.Length];
+            for (int i = 0; i < codes.Length; i++) rankedCodes[i] = rank[codes[i]];
+            SortByKeys(indices, rankedCodes.AsSpan(), ascending);
+        }
         else
         {
-            // Fallback: boxing path for nullable/string/mixed columns
             Array.Sort(indices, (a, b) =>
             {
                 var va = col.GetObject(a);
@@ -249,7 +345,11 @@ public class DataFrame : IEnumerable<DataFrameRow>
             });
         }
 
-        return new DataFrame(_columns.Select(c => c.TakeRows(indices)));
+        // Parallel TakeRows for sort output
+        var sortedCols = new Column.IColumn[_columns.Count];
+        var colArr2 = _columns.ToArray();
+        Parallel.For(0, colArr2.Length, ci => sortedCols[ci] = colArr2[ci].TakeRows(indices));
+        return new DataFrame(sortedCols);
     }
 
     /// <summary>
@@ -277,6 +377,18 @@ public class DataFrame : IEnumerable<DataFrameRow>
         public int Compare(int a, int b) => _ascending
             ? _values[a].CompareTo(_values[b])
             : _values[b].CompareTo(_values[a]);
+    }
+
+    private readonly struct StringArrayComparer : IComparer<int>
+    {
+        private readonly string?[] _values;
+        private readonly bool _ascending;
+        public StringArrayComparer(string?[] values, bool ascending) { _values = values; _ascending = ascending; }
+        public int Compare(int a, int b)
+        {
+            int cmp = string.Compare(_values[a], _values[b], StringComparison.Ordinal);
+            return _ascending ? cmp : -cmp;
+        }
     }
 
     private sealed class BoxingComparer : IComparer<int>
@@ -335,13 +447,31 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 comparers[k] = new SpanComparer<long>(lc.Buffer.Span.ToArray(), asc);
             else if (col is Column.Column<float> fc && fc.NullCount == 0)
                 comparers[k] = new SpanComparer<float>(fc.Buffer.Span.ToArray(), asc);
+            else if (col is Column.StringColumn sc)
+            {
+                // Use dict codes with sorted rank mapping for fast integer comparison
+                var (codes, uniques) = sc.GetDictCodes();
+                // Build rank map: sort uniques alphabetically, map each code to its rank
+                var sortOrder = Enumerable.Range(0, uniques.Length).ToArray();
+                Array.Sort(sortOrder, (a, b) => string.Compare(uniques[a], uniques[b], StringComparison.Ordinal));
+                var rank = new int[uniques.Length];
+                for (int r = 0; r < sortOrder.Length; r++) rank[sortOrder[r]] = r;
+                // Map codes to ranks
+                var rankedCodes = new int[codes.Length];
+                for (int i = 0; i < codes.Length; i++) rankedCodes[i] = rank[codes[i]];
+                comparers[k] = new SpanComparer<int>(rankedCodes, asc);
+            }
             else
                 comparers[k] = new BoxingComparer(col, asc);
         }
 
         Array.Sort(indices, new ChainedComparer(comparers));
 
-        return new DataFrame(_columns.Select(c => c.TakeRows(indices)));
+        // Parallel TakeRows for multi-key sort output
+        var sortedCols = new Column.IColumn[_columns.Count];
+        var colArr3 = _columns.ToArray();
+        Parallel.For(0, colArr3.Length, ci => sortedCols[ci] = colArr3[ci].TakeRows(indices));
+        return new DataFrame(sortedCols);
     }
 
     /// <summary>
@@ -356,15 +486,88 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     /// <summary>
     /// Return the n rows with the largest values in the specified column.
+    /// Uses partial sort (O(n) quickselect + O(k log k) sort of top-k) instead of full O(n log n) sort.
     /// </summary>
-    public DataFrame Nlargest(int n, string column) =>
-        Sort(column, ascending: false).Head(n);
+    public DataFrame Nlargest(int n, string column)
+    {
+        if (n >= RowCount) return Sort(column, ascending: false);
+        return PartialSort(n, column, ascending: false);
+    }
 
     /// <summary>
     /// Return the n rows with the smallest values in the specified column.
+    /// Uses partial sort (O(n) quickselect + O(k log k) sort of top-k) instead of full O(n log n) sort.
     /// </summary>
-    public DataFrame Nsmallest(int n, string column) =>
-        Sort(column, ascending: true).Head(n);
+    public DataFrame Nsmallest(int n, string column)
+    {
+        if (n >= RowCount) return Sort(column, ascending: true);
+        return PartialSort(n, column, ascending: true);
+    }
+
+    /// <summary>
+    /// Partial sort: find top-N rows without sorting the entire dataset.
+    /// O(n + k log k) instead of O(n log n).
+    /// </summary>
+    private DataFrame PartialSort(int k, string column, bool ascending)
+    {
+        var col = this[column];
+        var indices = new int[RowCount];
+        for (int i = 0; i < RowCount; i++) indices[i] = i;
+
+        // Extract sort keys as doubles for comparison
+        var keys = new double[RowCount];
+        for (int i = 0; i < RowCount; i++)
+        {
+            var obj = col.GetObject(i);
+            keys[i] = obj is not null ? Convert.ToDouble(obj) : (ascending ? double.MaxValue : double.MinValue);
+        }
+
+        // Quickselect to partition: top-k elements end up in indices[0..k-1]
+        QuickSelectPartition(keys, indices, 0, RowCount - 1, k, ascending);
+
+        // Sort just the top-k
+        var topIndices = indices[..k];
+        var topKeys = new double[k];
+        for (int i = 0; i < k; i++) topKeys[i] = keys[topIndices[i]];
+        Array.Sort(topKeys, topIndices);
+        if (!ascending) Array.Reverse(topIndices);
+
+        return new DataFrame(_columns.Select(c => c.TakeRows(topIndices)));
+    }
+
+    private static void QuickSelectPartition(double[] keys, int[] indices, int lo, int hi, int k, bool ascending)
+    {
+        while (lo < hi)
+        {
+            // Median-of-3 pivot
+            int mid = lo + (hi - lo) / 2;
+            if (ascending ? keys[indices[lo]] > keys[indices[mid]] : keys[indices[lo]] < keys[indices[mid]])
+                (indices[lo], indices[mid]) = (indices[mid], indices[lo]);
+            if (ascending ? keys[indices[lo]] > keys[indices[hi]] : keys[indices[lo]] < keys[indices[hi]])
+                (indices[lo], indices[hi]) = (indices[hi], indices[lo]);
+            if (ascending ? keys[indices[mid]] > keys[indices[hi]] : keys[indices[mid]] < keys[indices[hi]])
+                (indices[mid], indices[hi]) = (indices[hi], indices[mid]);
+
+            (indices[mid], indices[hi - 1]) = (indices[hi - 1], indices[mid]);
+            double pivot = keys[indices[hi - 1]];
+
+            int store = lo;
+            for (int i = lo; i < hi - 1; i++)
+            {
+                bool less = ascending ? keys[indices[i]] < pivot : keys[indices[i]] > pivot;
+                if (less)
+                {
+                    (indices[store], indices[i]) = (indices[i], indices[store]);
+                    store++;
+                }
+            }
+            (indices[store], indices[hi - 1]) = (indices[hi - 1], indices[store]);
+
+            if (store == k) return;
+            else if (store < k) lo = store + 1;
+            else hi = store - 1;
+        }
+    }
 
     // -- Apply --
 
@@ -609,6 +812,7 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     /// <summary>
     /// Remove duplicate rows. Compares all columns by default, or a subset.
+    /// Uses typed fast paths for string and numeric columns to avoid boxing.
     /// </summary>
     public DataFrame DropDuplicates(params string[] subset)
     {
@@ -616,15 +820,24 @@ public class DataFrame : IEnumerable<DataFrameRow>
             ? subset.Select(n => this[n]).ToArray()
             : _columns.ToArray();
 
-        // Bucketed dedup: Dictionary<hash, List<rowIndex>> for O(1) amortized collision handling
+        // Fast path: all string columns → composite key HashSet (zero boxing)
+        if (checkCols.All(c => c is Column.StringColumn))
+        {
+            return DropDuplicatesStringFast(checkCols.Cast<Column.StringColumn>().ToArray());
+        }
+
+        // General typed path
+        var hashers = BuildTypedHashers(checkCols);
+        var comparers = BuildTypedComparers(checkCols);
+
         var buckets = new Dictionary<int, List<int>>();
         var keepMask = new bool[RowCount];
 
         for (int r = 0; r < RowCount; r++)
         {
             var hash = new HashCode();
-            foreach (var col in checkCols)
-                hash.Add(col.GetObject(r));
+            foreach (var hasher in hashers)
+                hasher(r, ref hash);
             int h = hash.ToHashCode();
 
             if (!buckets.TryGetValue(h, out var bucket))
@@ -635,15 +848,13 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 continue;
             }
 
-            // Only compare within the same hash bucket
             bool isDuplicate = false;
             foreach (var prev in bucket)
             {
                 bool allEqual = true;
-                foreach (var col in checkCols)
+                foreach (var cmp in comparers)
                 {
-                    if (!Equals(col.GetObject(r), col.GetObject(prev)))
-                    { allEqual = false; break; }
+                    if (!cmp(r, prev)) { allEqual = false; break; }
                 }
                 if (allEqual) { isDuplicate = true; break; }
             }
@@ -653,6 +864,154 @@ public class DataFrame : IEnumerable<DataFrameRow>
         }
 
         return Filter(keepMask);
+    }
+
+    private DataFrame DropDuplicatesStringFast(Column.StringColumn[] cols)
+    {
+        var keepMask = new bool[RowCount];
+
+        if (cols.Length == 1)
+        {
+            // Single string column: direct HashSet<string>
+            var seen = new HashSet<string>(RowCount / 4, StringComparer.Ordinal);
+            var vals = cols[0].GetValues();
+            for (int r = 0; r < RowCount; r++)
+                keepMask[r] = seen.Add(vals[r] ?? "");
+        }
+        else if (cols.Length == 2)
+        {
+            // Dict-encode both columns (reuse cached, parallel if both need fresh)
+            var cached1 = cols[0]._cachedDict;
+            var cached2 = cols[1]._cachedDict;
+            DictEncoding dict1, dict2;
+            if (cached1 is not null && cached2 is not null)
+            {
+                dict1 = cached1; dict2 = cached2;
+            }
+            else if (cached1 is not null)
+            {
+                dict1 = cached1; dict2 = DictEncoding.Encode(cols[1]);
+            }
+            else if (cached2 is not null)
+            {
+                dict1 = DictEncoding.Encode(cols[0]); dict2 = cached2;
+            }
+            else
+            {
+                dict1 = null!; dict2 = null!;
+                Parallel.Invoke(
+                    () => dict1 = DictEncoding.Encode(cols[0]),
+                    () => dict2 = DictEncoding.Encode(cols[1])
+                );
+            }
+            var codes1 = dict1.Codes;
+            var codes2 = dict2.Codes;
+            int nUniques1 = dict1.Uniques.Length;
+            int nUniques2 = dict2.Uniques.Length;
+
+            // If composite key space fits in a flat boolean array, use it
+            long keySpace = (long)nUniques1 * nUniques2;
+            if (keySpace <= 100_000_000)
+            {
+                var seen = new bool[keySpace];
+                for (int r = 0; r < RowCount; r++)
+                {
+                    int key = codes1[r] * nUniques2 + codes2[r];
+                    if (seen[key]) { keepMask[r] = false; }
+                    else { seen[key] = true; keepMask[r] = true; }
+                }
+            }
+            else
+            {
+                var seen = new HashSet<long>(Math.Min(RowCount, (int)Math.Min(keySpace, int.MaxValue)));
+                for (int r = 0; r < RowCount; r++)
+                {
+                    long key = ((long)codes1[r] << 20) | (uint)codes2[r];
+                    keepMask[r] = seen.Add(key);
+                }
+            }
+        }
+        else
+        {
+            var seen = new HashSet<long>(RowCount / 4);
+            var arrays = cols.Select(c => c.GetValues()).ToArray();
+            for (int r = 0; r < RowCount; r++)
+            {
+                var hash = new HashCode();
+                foreach (var arr in arrays) hash.Add(arr[r]);
+                keepMask[r] = seen.Add(hash.ToHashCode());
+            }
+        }
+
+        return Filter(keepMask);
+    }
+
+    private delegate bool TypedComparer(int rowA, int rowB);
+
+    private static TypedComparer[] BuildTypedComparers(Column.IColumn[] cols)
+    {
+        var comparers = new TypedComparer[cols.Length];
+        for (int c = 0; c < cols.Length; c++)
+        {
+            var col = cols[c];
+            if (col is Column.Column<double> dc)
+            {
+                var arr = dc.Buffer.Span.ToArray();
+                comparers[c] = (a, b) => arr[a] == arr[b];
+            }
+            else if (col is Column.Column<int> ic)
+            {
+                var arr = ic.Buffer.Span.ToArray();
+                comparers[c] = (a, b) => arr[a] == arr[b];
+            }
+            else if (col is Column.StringColumn sc)
+            {
+                var vals = sc.GetValues();
+                comparers[c] = (a, b) => string.Equals(vals[a], vals[b], StringComparison.Ordinal);
+            }
+            else
+            {
+                comparers[c] = (a, b) => Equals(col.GetObject(a), col.GetObject(b));
+            }
+        }
+        return comparers;
+    }
+
+    private delegate void TypedHasher(int row, ref HashCode hash);
+
+    private static TypedHasher[] BuildTypedHashers(Column.IColumn[] cols)
+    {
+        var hashers = new TypedHasher[cols.Length];
+        for (int c = 0; c < cols.Length; c++)
+        {
+            var col = cols[c];
+            if (col is Column.Column<double> dc)
+            {
+                var span = dc.Buffer.Span.ToArray();
+                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+            }
+            else if (col is Column.Column<int> ic)
+            {
+                var span = ic.Buffer.Span.ToArray();
+                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+            }
+            else if (col is Column.Column<long> lc)
+            {
+                var span = lc.Buffer.Span.ToArray();
+                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+            }
+            else if (col is Column.StringColumn sc)
+            {
+                var vals = sc.GetValues();
+                hashers[c] = (int r, ref HashCode h) => h.Add(vals[r]);
+            }
+            else
+            {
+                // Fallback: boxing
+                hashers[c] = (int r, ref HashCode h) => h.Add(col.GetObject(r));
+            }
+        }
+        return hashers;
     }
 
     /// <summary>
@@ -1248,8 +1607,17 @@ public class DataFrame : IEnumerable<DataFrameRow>
     {
         if (n > RowCount) n = RowCount;
         var rng = seed.HasValue ? new Random(seed.Value) : Random.Shared;
-        var indices = Enumerable.Range(0, RowCount).OrderBy(_ => rng.Next()).Take(n).ToArray();
-        Array.Sort(indices);
+
+        // Fisher-Yates partial shuffle: O(n) instead of O(N log N)
+        var pool = new int[RowCount];
+        for (int i = 0; i < RowCount; i++) pool[i] = i;
+        for (int i = 0; i < n; i++)
+        {
+            int j = rng.Next(i, RowCount);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+        var indices = pool.AsSpan(0, n).ToArray();
+        Array.Sort(indices); // sort for sequential access
         return new DataFrame(_columns.Select(c => c.TakeRows(indices)));
     }
 

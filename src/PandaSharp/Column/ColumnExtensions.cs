@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace PandaSharp.Column;
 
@@ -772,13 +774,24 @@ public static class ColumnExtensions
     public static Column<T> CumSum<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
+        // Fast path: no nulls → write directly to Arrow byte buffer
+        if (col.NullCount == 0)
+        {
+            int n = col.Length;
+            var bytes = new byte[n * Unsafe.SizeOf<T>()];
+            var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
+            var span = col.Buffer.Span;
+            T running = T.Zero;
+            for (int i = 0; i < n; i++) { running += span[i]; result[i] = running; }
+            return Column<T>.WrapResult(col.Name, bytes, n);
+        }
         var values = new T?[col.Length];
-        T running = T.Zero;
+        T running2 = T.Zero;
         for (int i = 0; i < col.Length; i++)
         {
             if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
-            running += col.Buffer.Span[i];
-            values[i] = running;
+            running2 += col.Buffer.Span[i];
+            values[i] = running2;
         }
         return Column<T>.FromNullable(col.Name, values);
     }
@@ -800,14 +813,25 @@ public static class ColumnExtensions
     public static Column<T> CumMin<T>(this Column<T> col)
         where T : struct, IComparisonOperators<T, T, bool>
     {
+        if (col.NullCount == 0)
+        {
+            int n = col.Length;
+            var bytes = new byte[n * Unsafe.SizeOf<T>()];
+            var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
+            var span = col.Buffer.Span;
+            T running = span[0];
+            result[0] = running;
+            for (int i = 1; i < n; i++) { if (span[i] < running) running = span[i]; result[i] = running; }
+            return Column<T>.WrapResult(col.Name, bytes, n);
+        }
         var values = new T?[col.Length];
-        T? running = null;
+        T? running2 = null;
         for (int i = 0; i < col.Length; i++)
         {
             if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
             var val = col.Buffer.Span[i];
-            running = running is null || val < running.Value ? val : running;
-            values[i] = running;
+            running2 = running2 is null || val < running2.Value ? val : running2;
+            values[i] = running2;
         }
         return Column<T>.FromNullable(col.Name, values);
     }
@@ -815,14 +839,25 @@ public static class ColumnExtensions
     public static Column<T> CumMax<T>(this Column<T> col)
         where T : struct, IComparisonOperators<T, T, bool>
     {
+        if (col.NullCount == 0)
+        {
+            int n = col.Length;
+            var bytes = new byte[n * Unsafe.SizeOf<T>()];
+            var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
+            var span = col.Buffer.Span;
+            T running = span[0];
+            result[0] = running;
+            for (int i = 1; i < n; i++) { if (span[i] > running) running = span[i]; result[i] = running; }
+            return Column<T>.WrapResult(col.Name, bytes, n);
+        }
         var values = new T?[col.Length];
-        T? running = null;
+        T? running2 = null;
         for (int i = 0; i < col.Length; i++)
         {
             if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
             var val = col.Buffer.Span[i];
-            running = running is null || val > running.Value ? val : running;
-            values[i] = running;
+            running2 = running2 is null || val > running2.Value ? val : running2;
+            values[i] = running2;
         }
         return Column<T>.FromNullable(col.Name, values);
     }
@@ -832,6 +867,16 @@ public static class ColumnExtensions
     public static Column<double> PctChange<T>(this Column<T> col, int periods = 1)
         where T : struct, INumber<T>
     {
+        // Fast path for Column<double> with no nulls — uses nullable for first 'periods' elements
+        if (col is Column<double> dc && dc.NullCount == 0)
+        {
+            int n = dc.Length;
+            var result = new double?[n];
+            var span = dc.Buffer.Span;
+            for (int i = periods; i < n; i++)
+                result[i] = span[i - periods] != 0 ? (span[i] - span[i - periods]) / span[i - periods] : null;
+            return Column<double>.FromNullable(dc.Name, result);
+        }
         var values = new double?[col.Length];
         for (int i = periods; i < col.Length; i++)
         {

@@ -63,6 +63,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PandaSharp.Samples.ML", "sa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PandaSharp.Samples.Postgres", "samples\PandaSharp.Samples.Postgres\PandaSharp.Samples.Postgres.csproj", "{5EB73BBA-2B20-4D3A-9EDE-65CEEB2B4F35}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PandaSharp.Samples.StockAnalyzer", "samples\PandaSharp.Samples.StockAnalyzer\PandaSharp.Samples.StockAnalyzer.csproj", "{3ACC146F-8BCA-4DC1-A488-A65033F1C191}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -397,6 +399,18 @@ Global
 		{5EB73BBA-2B20-4D3A-9EDE-65CEEB2B4F35}.Release|x64.Build.0 = Release|Any CPU
 		{5EB73BBA-2B20-4D3A-9EDE-65CEEB2B4F35}.Release|x86.ActiveCfg = Release|Any CPU
 		{5EB73BBA-2B20-4D3A-9EDE-65CEEB2B4F35}.Release|x86.Build.0 = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|x64.Build.0 = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Debug|x86.Build.0 = Debug|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|x64.ActiveCfg = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|x64.Build.0 = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|x86.ActiveCfg = Release|Any CPU
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -429,5 +443,6 @@ Global
 		{9F67DF78-C6B7-4385-AC70-AB9B37D98BF2} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{E7BEA506-5BC8-4F3B-A92B-6028BCD9F036} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{5EB73BBA-2B20-4D3A-9EDE-65CEEB2B4F35} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{3ACC146F-8BCA-4DC1-A488-A65033F1C191} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

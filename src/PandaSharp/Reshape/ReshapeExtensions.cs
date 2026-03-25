@@ -145,38 +145,95 @@ public static class ReshapeExtensions
 
     /// <summary>
     /// Melt (unpivot) from wide to long format.
+    /// Pre-allocates arrays and uses typed fast paths to avoid boxing.
     /// </summary>
     public static DataFrame Melt(this DataFrame df, string[] idVars, string[]? valueVars = null,
         string varName = "variable", string valueName = "value")
     {
         valueVars ??= df.ColumnNames.Where(c => !idVars.Contains(c)).ToArray();
+        int nRows = df.RowCount;
+        int nValueVars = valueVars.Length;
+        int outRows = nRows * nValueVars;
 
-        var resultIds = new Dictionary<string, List<object?>>();
+        // Build "variable" column: repeating block of valueVar names
+        var varArr = new string?[outRows];
+        // Build one block, then tile it across rows
+        var block = new string?[nValueVars];
+        for (int v = 0; v < nValueVars; v++) block[v] = valueVars[v];
+        for (int r = 0; r < nRows; r++)
+            Array.Copy(block, 0, varArr, r * nValueVars, nValueVars);
+
+        var cols = new List<IColumn>();
+
+        // Build id columns: each row value repeats nValueVars times
         foreach (var id in idVars)
-            resultIds[id] = new List<object?>();
-
-        var varValues = new List<string?>();
-        var valValues = new List<object?>();
-
-        for (int r = 0; r < df.RowCount; r++)
         {
-            foreach (var valVar in valueVars)
+            var srcCol = df[id];
+            if (srcCol is StringColumn sc)
             {
-                foreach (var id in idVars)
-                    resultIds[id].Add(df[id].GetObject(r));
-                varValues.Add(valVar);
-                valValues.Add(df[valVar].GetObject(r));
+                var srcVals = sc.GetValues();
+                var outArr = new string?[outRows];
+                for (int r = 0; r < nRows; r++)
+                    Array.Fill(outArr, srcVals[r], r * nValueVars, nValueVars);
+                cols.Add(StringColumn.CreateOwnedNoNulls(id, outArr));
+            }
+            else if (srcCol is Column<double> dc)
+            {
+                var srcSpan = dc.Values;
+                var outArr = new double[outRows];
+                for (int r = 0; r < nRows; r++)
+                    outArr.AsSpan(r * nValueVars, nValueVars).Fill(srcSpan[r]);
+                cols.Add(new Column<double>(id, outArr));
+            }
+            else
+            {
+                var idxBuf = new int[outRows];
+                for (int r = 0; r < nRows; r++)
+                    for (int v = 0; v < nValueVars; v++)
+                        idxBuf[r * nValueVars + v] = r;
+                cols.Add(srcCol.TakeRows(idxBuf));
             }
         }
 
-        var cols = new List<IColumn>();
-        foreach (var id in idVars)
-            cols.Add(BuildColumn(id, df[id].DataType, resultIds[id].ToArray()));
-        cols.Add(new StringColumn(varName, varValues.ToArray()));
+        cols.Add(StringColumn.CreateOwnedNoNulls(varName, varArr));
 
-        // Determine value type from first value var
-        var valType = valueVars.Length > 0 ? df[valueVars[0]].DataType : typeof(string);
-        cols.Add(BuildColumn(valueName, valType, valValues.ToArray()));
+        // Build value column: interleave all value var columns
+        // Use typed fast path for the common case (all same type, no nulls)
+        var valType = nValueVars > 0 ? df[valueVars[0]].DataType : typeof(string);
+        if (valType == typeof(double) && valueVars.All(v => df[v] is Column<double>))
+        {
+            var valArr = new double[outRows];
+            for (int v = 0; v < nValueVars; v++)
+            {
+                var span = ((Column<double>)df[valueVars[v]]).Values;
+                for (int r = 0; r < nRows; r++)
+                    valArr[r * nValueVars + v] = span[r];
+            }
+            cols.Add(new Column<double>(valueName, valArr));
+        }
+        else if (valType == typeof(int) && valueVars.All(v => df[v] is Column<int>))
+        {
+            var valArr = new int[outRows];
+            for (int v = 0; v < nValueVars; v++)
+            {
+                var span = ((Column<int>)df[valueVars[v]]).Values;
+                for (int r = 0; r < nRows; r++)
+                    valArr[r * nValueVars + v] = span[r];
+            }
+            cols.Add(new Column<int>(valueName, valArr));
+        }
+        else
+        {
+            // Fallback: use GetObject (boxing)
+            var valArr = new object?[outRows];
+            for (int v = 0; v < nValueVars; v++)
+            {
+                var col = df[valueVars[v]];
+                for (int r = 0; r < nRows; r++)
+                    valArr[r * nValueVars + v] = col.GetObject(r);
+            }
+            cols.Add(BuildColumn(valueName, valType, valArr));
+        }
 
         return new DataFrame(cols);
     }

@@ -6,6 +6,28 @@ namespace PandaSharp.IO;
 
 public static class CsvReader
 {
+    /// <summary>
+    /// Read multiple CSV files in parallel and return an array of DataFrames.
+    /// Significantly faster than sequential reads for many files.
+    /// </summary>
+    /// <summary>
+    /// Read multiple CSV files in parallel. Returns null entries for files that fail to parse.
+    /// </summary>
+    public static DataFrame?[] ReadMany(string[] paths, CsvReadOptions? options = null, int? maxParallelism = null)
+    {
+        var results = new DataFrame?[paths.Length];
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = maxParallelism ?? Environment.ProcessorCount
+        };
+        Parallel.For(0, paths.Length, parallelOptions, i =>
+        {
+            try { results[i] = Read(paths[i], options); }
+            catch { results[i] = null; }
+        });
+        return results;
+    }
+
     public static DataFrame Read(string path, CsvReadOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(path);

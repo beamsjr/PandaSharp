@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.Viz\PandaSharp.Viz.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.ML\PandaSharp.ML.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.Streaming\PandaSharp.Streaming.csproj" />
+  </ItemGroup>
+
+</Project>
