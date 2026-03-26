@@ -1787,8 +1787,19 @@ public class DataFrame : IEnumerable<DataFrameRow>
             return ((double)val).CompareTo(dv);
         if (colType == typeof(float) && float.TryParse(valueStr, System.Globalization.CultureInfo.InvariantCulture, out float fv))
             return ((float)val).CompareTo(fv);
+        if (colType == typeof(DateTime) && DateTime.TryParse(valueStr, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out DateTime dtv))
+            return ((DateTime)val).CompareTo(dtv);
         if (colType == typeof(string))
+        {
+            // Try DateTime comparison for date-like strings
+            if (DateTime.TryParse((string)val, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out DateTime sdt) &&
+                DateTime.TryParse(valueStr, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out DateTime qdt))
+                return sdt.CompareTo(qdt);
             return string.Compare((string)val, valueStr, StringComparison.Ordinal);
+        }
         return val.ToString()!.CompareTo(valueStr);
     }
 
