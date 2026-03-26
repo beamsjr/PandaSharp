@@ -34,3 +34,21 @@ pandasharp_spill_*
 .~lock.*
 *.docx
 *.xlsx
+
+## Benchmark output
+*_bench_output/
+*_output/
+benchmarks/**/*_results.json
+benchmarks/**/*.safetensors
+benchmarks/**/*.parquet
+ml_bench_output/
+
+## Sample/stock output
+stock_output/
+stock_output_python/
+
+## Root-level scratch files
+TODO_*.md
+.standards-profile.md
+*.ipynb
+prompts/
