@@ -19,6 +19,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write   # Required for Trusted Publishing OIDC
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,11 +47,14 @@ jobs:
 
       - name: Test
         run: |
-          dotnet test tests/PandaSharp.Tests.Unit --no-build -c Release
-          dotnet test tests/PandaSharp.IO.Database.Tests --no-build -c Release
-          dotnet test tests/PandaSharp.ML.Tests --no-build -c Release
-          dotnet test tests/PandaSharp.Streaming.Tests --no-build -c Release
-          dotnet test tests/PandaSharp.Geo.Tests --no-build -c Release
+          dotnet test tests/PandaSharp.Tests.Unit --no-build -c Release --logger "trx;LogFileName=unit.trx"
+          dotnet test tests/PandaSharp.IO.Database.Tests --no-build -c Release --logger "trx;LogFileName=db.trx"
+          dotnet test tests/PandaSharp.ML.Tests --no-build -c Release --logger "trx;LogFileName=ml.trx"
+          dotnet test tests/PandaSharp.Streaming.Tests --no-build -c Release --logger "trx;LogFileName=streaming.trx"
+          dotnet test tests/PandaSharp.Geo.Tests --no-build -c Release --logger "trx;LogFileName=geo.trx"
+          dotnet test tests/PandaSharp.Text.Tests --no-build -c Release --logger "trx;LogFileName=text.trx"
+          dotnet test tests/PandaSharp.TimeSeries.Tests --no-build -c Release --logger "trx;LogFileName=timeseries.trx"
+          dotnet test tests/PandaSharp.SafeTensors.Tests --no-build -c Release --logger "trx;LogFileName=safetensors.trx"
 
       - name: Pack NuGet packages
         run: |
@@ -67,12 +73,17 @@ jobs:
           dotnet pack src/PandaSharp.Geo/PandaSharp.Geo.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
           dotnet pack src/PandaSharp.Cloud/PandaSharp.Cloud.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
           dotnet pack src/PandaSharp.Flight/PandaSharp.Flight.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Text/PandaSharp.Text.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.TimeSeries/PandaSharp.TimeSeries.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.SafeTensors/PandaSharp.SafeTensors.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.GPU/PandaSharp.GPU.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/PandaSharp.Vision/PandaSharp.Vision.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
 
       - name: List packages
         run: ls -la ./nupkgs/
 
-      - name: Push to NuGet.org
-        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Push to NuGet.org (Trusted Publishing)
+        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Upload packages as artifacts
         uses: actions/upload-artifact@v4
