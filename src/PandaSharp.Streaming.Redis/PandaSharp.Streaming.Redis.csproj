@@ -4,7 +4,12 @@
     <RootNamespace>PandaSharp.Streaming.Redis</RootNamespace>
     <PackageId>PandaSharp.Streaming.Redis</PackageId>
     <Description>Redis Streams integration for PandaSharp Streaming</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp.Streaming\PandaSharp.Streaming.csproj" />

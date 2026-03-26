@@ -6,7 +6,12 @@
     <Description>A high-performance, pandas-like DataFrame library for .NET</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>dataframe;data;analytics;arrow;columnar</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="PandaSharp.ML" />

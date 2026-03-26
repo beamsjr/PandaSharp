@@ -7,7 +7,12 @@
     <Description>Machine learning toolkit for PandaSharp: tensors, feature engineering, pipelines, evaluation</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>ml;machine-learning;dataframe;tensor;pipeline;feature-engineering</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="PandaSharp.ML.Tests" />

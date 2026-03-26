@@ -6,7 +6,12 @@
     <Description>Image and video processing for PandaSharp: transforms, augmentation pipelines, data loaders, and model integration</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>image;vision;augmentation;dataframe;tensor;computer-vision</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />

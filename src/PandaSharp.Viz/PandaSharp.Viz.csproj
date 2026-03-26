@@ -6,7 +6,12 @@
     <Description>Interactive D3.js visualizations for PandaSharp DataFrames</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>visualization;charts;d3;dataframe;interactive</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />

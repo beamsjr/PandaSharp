@@ -5,7 +5,12 @@
     <PackageId>PandaSharp.ML.MLNet</PackageId>
     <Description>ML.NET IDataView bridge for PandaSharp DataFrames</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />

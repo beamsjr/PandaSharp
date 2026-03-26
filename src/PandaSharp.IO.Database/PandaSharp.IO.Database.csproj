@@ -5,11 +5,15 @@
     <PackageId>PandaSharp.IO.Database</PackageId>
     <Description>Database integration with expression push-down SQL generation for PandaSharp</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
   </ItemGroup>
-
 
 </Project>

@@ -4,7 +4,12 @@
     <RootNamespace>PandaSharp.Cloud</RootNamespace>
     <PackageId>PandaSharp.Cloud</PackageId>
     <Description>Cloud storage adapters for PandaSharp — read/write DataFrames from S3, Azure Blob, and GCS</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />

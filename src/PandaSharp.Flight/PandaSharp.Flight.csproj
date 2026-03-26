@@ -4,7 +4,12 @@
     <RootNamespace>PandaSharp.Flight</RootNamespace>
     <PackageId>PandaSharp.Flight</PackageId>
     <Description>Arrow Flight RPC for distributed DataFrame transport and Flight SQL</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />

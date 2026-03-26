@@ -6,7 +6,12 @@
     <Description>Real-time micro-batch streaming engine for PandaSharp DataFrames</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>streaming;realtime;dataframe;window;aggregation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
