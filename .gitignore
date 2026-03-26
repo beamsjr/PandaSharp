@@ -37,6 +37,7 @@ pandasharp_spill_*
 
 ## Benchmark output
 *_bench_output/
+vision_bench_*/
 benchmarks/**/*_results.json
 benchmarks/**/*.safetensors
 benchmarks/**/*.parquet
@@ -50,4 +51,5 @@ stock_output_python/
 TODO_*.md
 .standards-profile.md
 *.ipynb
+house-prices-*
 prompts/
