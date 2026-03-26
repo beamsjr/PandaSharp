@@ -298,8 +298,12 @@ public class MLEdgeCaseRound5Tests
     [Fact]
     public void ElasticNet_Alpha0_BehavesLikeOLS()
     {
-        var X = new Tensor<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8 }, 4, 2);
-        var y = new Tensor<double>(new double[] { 3, 7, 11, 15 }, 4); // y = 1*x1 + 2*x2 + approx 0
+        // Use enough samples (10) to ensure well-conditioned normal equations on all platforms
+        var X = new Tensor<double>(new double[] {
+            1, 2,  2, 1,  3, 3,  4, 2,  5, 1,
+            1, 5,  2, 4,  3, 2,  4, 3,  5, 5
+        }, 10, 2);
+        var y = new Tensor<double>(new double[] { 5, 4, 9, 8, 7, 11, 10, 8, 10, 15 }, 10);
 
         var ols = new LinearRegression();
         ols.Fit(X, y);
@@ -310,7 +314,7 @@ public class MLEdgeCaseRound5Tests
         var olsPreds = ols.Predict(X);
         var enetPreds = enet.Predict(X);
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 10; i++)
             Math.Abs(olsPreds.Span[i] - enetPreds.Span[i]).Should().BeLessThan(0.5,
                 "ElasticNet with alpha=0 should produce predictions close to OLS");
     }
