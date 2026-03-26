@@ -42,7 +42,8 @@ benchmarks/**/*.safetensors
 benchmarks/**/*.parquet
 ml_bench_output/
 
-## Python comparison output (not source)
+## Sample/stock output
+stock_output/
 stock_output_python/
 
 ## Root-level scratch files
