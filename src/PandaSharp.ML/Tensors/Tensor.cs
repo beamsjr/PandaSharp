@@ -69,6 +69,31 @@ public class Tensor<T> where T : struct, INumber<T>
         return new Tensor<T>(data, shape);
     }
 
+    /// <summary>Create a tensor with standard-normal random values (Box-Muller transform).</summary>
+    public static Tensor<T> RandomNormal(int seed, params int[] shape)
+    {
+        int total = 1;
+        foreach (var s in shape) total *= s;
+        var data = new T[total];
+        var rng = new Random(seed);
+        for (int i = 0; i < total - 1; i += 2)
+        {
+            // Box-Muller transform: generates pairs of standard normal values
+            double u1 = 1.0 - rng.NextDouble(); // avoid log(0)
+            double u2 = rng.NextDouble();
+            double mag = Math.Sqrt(-2.0 * Math.Log(u1));
+            data[i] = T.CreateChecked(mag * Math.Cos(2.0 * Math.PI * u2));
+            data[i + 1] = T.CreateChecked(mag * Math.Sin(2.0 * Math.PI * u2));
+        }
+        if (total % 2 == 1)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = rng.NextDouble();
+            data[total - 1] = T.CreateChecked(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        }
+        return new Tensor<T>(data, shape);
+    }
+
     // -- Indexing --
 
     public T this[params int[] indices]
@@ -297,8 +322,8 @@ public class Tensor<T> where T : struct, INumber<T>
         return sum;
     }
 
-    /// <summary>Raw data for framework interop.</summary>
-    public T[] ToArray() => (T[])_data.Clone();
+    /// <summary>Raw data for framework interop. Returns the internal array directly — do not mutate.</summary>
+    public T[] ToArray() => _data;
     internal T[] Data => _data;
 
     // -- Helpers --

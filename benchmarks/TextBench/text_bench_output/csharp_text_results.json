@@ -1,0 +1,32 @@
+[
+  {
+    "category": "Tokenize",
+    "op": "Whitespace tokenize (10K)",
+    "ms": 6
+  },
+  {
+    "category": "Tokenize",
+    "op": "Regex tokenize (10K)",
+    "ms": 23
+  },
+  {
+    "category": "Preprocess",
+    "op": "Stop word removal (10K)",
+    "ms": 5
+  },
+  {
+    "category": "Preprocess",
+    "op": "Porter stemming (10K)",
+    "ms": 68
+  },
+  {
+    "category": "Preprocess",
+    "op": "Bigram extraction (10K)",
+    "ms": 7
+  },
+  {
+    "category": "Similarity",
+    "op": "Pairwise cosine (1Kx1K, 384-dim)",
+    "ms": 4
+  }
+]

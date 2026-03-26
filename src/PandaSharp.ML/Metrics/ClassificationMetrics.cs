@@ -9,6 +9,24 @@ public record ClassificationResult(
     public override string ToString() =>
         $"Accuracy: {Accuracy:P2}  Precision: {Precision:P2}  Recall: {Recall:P2}  F1: {F1:P2}\n" +
         $"TP: {TruePositive}  FP: {FalsePositive}  TN: {TrueNegative}  FN: {FalseNegative}";
+
+    /// <summary>
+    /// Convert the confusion matrix to a labeled DataFrame.
+    /// Rows = actual class, columns = predicted class. Labels are "0" and "1" for binary.
+    /// </summary>
+    public DataFrame ToDataFrame()
+    {
+        int size = ConfusionMatrix.GetLength(0);
+        var columns = new List<IColumn>(size);
+        for (int col = 0; col < size; col++)
+        {
+            var values = new int[size];
+            for (int row = 0; row < size; row++)
+                values[row] = ConfusionMatrix[row, col];
+            columns.Add(new Column<int>(col.ToString(), values));
+        }
+        return new DataFrame(columns);
+    }
 }
 
 public record RegressionResult(double MSE, double RMSE, double MAE, double R2, double MAPE)
@@ -46,9 +64,26 @@ public static class MetricsCalculator
     /// <summary>Classification from int columns (0/1).</summary>
     public static ClassificationResult Classification(Column<int> yTrue, Column<int> yPred)
     {
-        var trueCol = new Column<bool>("true", Enumerable.Range(0, yTrue.Length).Select(i => yTrue[i] == 1).ToArray());
-        var predCol = new Column<bool>("pred", Enumerable.Range(0, yPred.Length).Select(i => yPred[i] == 1).ToArray());
-        return Classification(trueCol, predCol);
+        int n = yTrue.Length;
+        int tp = 0, fp = 0, tn = 0, fn = 0;
+        var trueVals = yTrue.Values;
+        var predVals = yPred.Values;
+        for (int i = 0; i < n; i++)
+        {
+            bool actual = trueVals[i] == 1;
+            bool predicted = predVals[i] == 1;
+            if (actual && predicted) tp++;
+            else if (!actual && predicted) fp++;
+            else if (!actual && !predicted) tn++;
+            else fn++;
+        }
+
+        double precision = tp + fp > 0 ? (double)tp / (tp + fp) : 0;
+        double recall = tp + fn > 0 ? (double)tp / (tp + fn) : 0;
+        double f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
+        double accuracy = (double)(tp + tn) / n;
+        var cm = new int[2, 2] { { tn, fp }, { fn, tp } };
+        return new ClassificationResult(accuracy, precision, recall, f1, cm, tp, fp, tn, fn);
     }
 
     /// <summary>Regression metrics.</summary>
@@ -89,15 +124,33 @@ public static class MetricsCalculator
     /// <summary>
     /// Multi-class classification metrics from integer label columns.
     /// Returns per-class precision/recall/f1 and macro/weighted averages.
+    /// Throws <see cref="ArgumentException"/> if any null values are found in the input columns.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when yTrue or yPred contain null values.</exception>
     public static MultiClassResult MultiClass(Column<int> yTrue, Column<int> yPred)
     {
         int n = yTrue.Length;
+
+        // Validate: null values in classification labels are likely a data error
+        for (int i = 0; i < n; i++)
+        {
+            if (!yTrue[i].HasValue)
+                throw new ArgumentException(
+                    $"yTrue contains a null value at index {i}. " +
+                    "Multi-class metrics require non-null integer labels. " +
+                    "Use DropNa() or FillNa() to handle missing values before computing metrics.");
+            if (!yPred[i].HasValue)
+                throw new ArgumentException(
+                    $"yPred contains a null value at index {i}. " +
+                    "Multi-class metrics require non-null integer labels. " +
+                    "Use DropNa() or FillNa() to handle missing values before computing metrics.");
+        }
+
         var classes = new HashSet<int>();
         for (int i = 0; i < n; i++)
         {
-            if (yTrue[i].HasValue) classes.Add(yTrue[i]!.Value);
-            if (yPred[i].HasValue) classes.Add(yPred[i]!.Value);
+            classes.Add(yTrue[i]!.Value);
+            classes.Add(yPred[i]!.Value);
         }
         var sortedClasses = classes.OrderBy(c => c).ToArray();
         int nClasses = sortedClasses.Length;
@@ -109,10 +162,9 @@ public static class MetricsCalculator
         int correct = 0;
         for (int i = 0; i < n; i++)
         {
-            int actual = yTrue[i] ?? 0;
-            int predicted = yPred[i] ?? 0;
-            if (classIndex.ContainsKey(actual) && classIndex.ContainsKey(predicted))
-                cm[classIndex[actual], classIndex[predicted]]++;
+            int actual = yTrue[i]!.Value;
+            int predicted = yPred[i]!.Value;
+            cm[classIndex[actual], classIndex[predicted]]++;
             if (actual == predicted) correct++;
         }
 
@@ -164,5 +216,23 @@ public record MultiClassResult(
         for (int i = 0; i < Classes.Length; i++)
             sb.AppendLine($"{Classes[i],8} {Precision[i],10:F4} {Recall[i],8:F4} {F1[i],8:F4} {Support[i],8}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Convert the confusion matrix to a labeled DataFrame.
+    /// Rows = actual class, columns = predicted class. Labels are the class integers as strings.
+    /// </summary>
+    public DataFrame ToDataFrame()
+    {
+        int size = ConfusionMatrix.GetLength(0);
+        var columns = new List<IColumn>(size);
+        for (int col = 0; col < size; col++)
+        {
+            var values = new int[size];
+            for (int row = 0; row < size; row++)
+                values[row] = ConfusionMatrix[row, col];
+            columns.Add(new Column<int>(Classes[col].ToString(), values));
+        }
+        return new DataFrame(columns);
     }
 }

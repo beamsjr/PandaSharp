@@ -122,6 +122,39 @@ public static class PipelineSerialization
             return field?.GetValue(step);
         }
 
+        // TargetEncoder: _encodings Dictionary<string, Dictionary<string, double>> + _globalMean
+        if (step is TargetEncoder)
+        {
+            var encodingsField = type.GetField("_encodings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var globalMeanField = type.GetField("_globalMean", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return new { encodings = encodingsField?.GetValue(step), globalMean = globalMeanField?.GetValue(step) };
+        }
+
+        // PolynomialFeatures: stateless transformer — only stores input column names
+        // (no learned parameters). _inputColumns is set during Fit but only determines
+        // which columns to expand, not learned statistics.
+        if (step is PolynomialFeatures)
+        {
+            var field = type.GetField("_inputColumns", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return new { inputColumns = field?.GetValue(step), note = "stateless: no learned parameters" };
+        }
+
         return null; // unfitted or no params to serialize
+    }
+
+    /// <summary>
+    /// Deserialize a pipeline from JSON bytes.
+    /// Not yet implemented — pipeline deserialization requires a type registry and
+    /// constructor-matching strategy for each transformer type. Contributions welcome.
+    /// </summary>
+    /// <param name="data">JSON bytes produced by <see cref="Serialize"/>.</param>
+    /// <returns>A reconstructed FeaturePipeline.</returns>
+    /// <exception cref="NotImplementedException">Always thrown. Deserialization is not yet implemented.</exception>
+    public static FeaturePipeline Deserialize(byte[] data)
+    {
+        throw new NotImplementedException(
+            "Pipeline deserialization is not yet implemented. " +
+            "Serialized pipelines can be inspected as JSON but cannot be reconstructed automatically. " +
+            "To restore a pipeline, reconstruct the steps manually and re-fit on training data.");
     }
 }

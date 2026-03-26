@@ -33,14 +33,11 @@ public static class CsvReader
         ArgumentNullException.ThrowIfNull(path);
         using var stream = File.OpenRead(path);
 
-        // Auto-detect gzip by extension
+        // Auto-detect gzip by extension — wrap FileStream directly, no intermediate buffer
         if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
         {
             using var gzip = new GZipStream(stream, CompressionMode.Decompress);
-            using var memStream = new MemoryStream();
-            gzip.CopyTo(memStream);
-            memStream.Position = 0;
-            return Read(memStream, options);
+            return Read(gzip, options);
         }
 
         return Read(stream, options);
@@ -517,7 +514,7 @@ public static class CsvReader
             // Check if line contains quotes — if so, use full ParseLine for correctness
             if (line.Contains(quote))
             {
-                var fields = ParseLine(line, delim, '"', options.StrictQuoting);
+                var fields = ParseLine(line, delim, quote, options.StrictQuoting);
                 for (int c = 0; c < Math.Min(fields.Length, colCount); c++)
                 {
                     var f = fields[c];

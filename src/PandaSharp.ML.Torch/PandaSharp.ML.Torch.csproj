@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
     <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
+    <ProjectReference Include="..\PandaSharp.SafeTensors\PandaSharp.SafeTensors.csproj" />
   </ItemGroup>
 
   <ItemGroup>

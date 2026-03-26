@@ -21,36 +21,65 @@ public class RollingWindow<T> where T : struct, INumber<T>
     // Typed fast path for Mean — O(n) sliding window with running sum
     public Column<double> Mean()
     {
-        if (_column.NullCount == 0 && !_center)
+        if (_column.NullCount == 0)
             return RollingMeanFast();
         return Apply(vals => vals.Count > 0 ? vals.Average() : double.NaN);
     }
 
-    public Column<double> Sum() => Apply(vals => vals.Count > 0 ? vals.Sum() : double.NaN);
-    public Column<double> Min() => Apply(vals => vals.Count > 0 ? vals.Min() : double.NaN);
-    public Column<double> Max() => Apply(vals => vals.Count > 0 ? vals.Max() : double.NaN);
+    public Column<double> Sum() => Apply(vals =>
+    {
+        if (vals.Count == 0) return double.NaN;
+        double s = 0;
+        for (int i = 0; i < vals.Count; i++) s += vals[i];
+        return s;
+    });
+
+    public Column<double> Min() => Apply(vals =>
+    {
+        if (vals.Count == 0) return double.NaN;
+        double m = vals[0];
+        for (int i = 1; i < vals.Count; i++) if (vals[i] < m) m = vals[i];
+        return m;
+    });
+
+    public Column<double> Max() => Apply(vals =>
+    {
+        if (vals.Count == 0) return double.NaN;
+        double m = vals[0];
+        for (int i = 1; i < vals.Count; i++) if (vals[i] > m) m = vals[i];
+        return m;
+    });
 
     public Column<double> Std() => Apply(vals =>
     {
         if (vals.Count < 2) return double.NaN;
-        double mean = vals.Average();
-        return Math.Sqrt(vals.Sum(v => (v - mean) * (v - mean)) / (vals.Count - 1));
+        double sum = 0;
+        for (int i = 0; i < vals.Count; i++) sum += vals[i];
+        double mean = sum / vals.Count;
+        double sumSq = 0;
+        for (int i = 0; i < vals.Count; i++) { double d = vals[i] - mean; sumSq += d * d; }
+        return Math.Sqrt(sumSq / (vals.Count - 1));
     });
 
     public Column<double> Var() => Apply(vals =>
     {
         if (vals.Count < 2) return double.NaN;
-        double mean = vals.Average();
-        return vals.Sum(v => (v - mean) * (v - mean)) / (vals.Count - 1);
+        double sum = 0;
+        for (int i = 0; i < vals.Count; i++) sum += vals[i];
+        double mean = sum / vals.Count;
+        double sumSq = 0;
+        for (int i = 0; i < vals.Count; i++) { double d = vals[i] - mean; sumSq += d * d; }
+        return sumSq / (vals.Count - 1);
     });
 
-    /// <summary>O(n) sliding window mean for null-free, non-centered case.</summary>
+    /// <summary>O(n) sliding window mean for null-free columns. Supports center alignment.</summary>
     private Column<double> RollingMeanFast()
     {
         int n = _column.Length;
+        int offset = _center ? _windowSize / 2 : 0;
 
-        // Native C fast path for double columns (only when minPeriods == windowSize, the default)
-        if (typeof(T) == typeof(double) && Native.NativeOps.IsAvailable && _minPeriods == _windowSize)
+        // Native C fast path for double columns (only when minPeriods == windowSize, non-centered)
+        if (typeof(T) == typeof(double) && Native.NativeOps.IsAvailable && _minPeriods == _windowSize && !_center)
         {
             var span = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(_column.Buffer.Span);
             var nativeResult = Native.NativeOps.RollingMean(span, _windowSize);
@@ -61,7 +90,8 @@ public class RollingWindow<T> where T : struct, INumber<T>
             return Column<double>.FromNullable(_column.Name, nullable);
         }
 
-        var result = new double?[n];
+        // Compute non-centered rolling mean into a temp array, then shift by offset
+        var temp = new double?[n];
         var src = _column.Buffer.Span;
         double sum = 0;
 
@@ -70,7 +100,18 @@ public class RollingWindow<T> where T : struct, INumber<T>
             sum += double.CreateChecked(src[i]);
             if (i >= _windowSize) sum -= double.CreateChecked(src[i - _windowSize]);
             int windowLen = Math.Min(i + 1, _windowSize);
-            result[i] = windowLen >= _minPeriods ? sum / windowLen : null;
+            temp[i] = windowLen >= _minPeriods ? sum / windowLen : null;
+        }
+
+        if (!_center)
+            return Column<double>.FromNullable(_column.Name, temp);
+
+        // Shift output backwards by offset positions for center alignment
+        var result = new double?[n];
+        for (int i = 0; i < n; i++)
+        {
+            int srcIdx = i + offset;
+            result[i] = srcIdx < n ? temp[srcIdx] : null;
         }
         return Column<double>.FromNullable(_column.Name, result);
     }

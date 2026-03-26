@@ -8,46 +8,74 @@ namespace PandaSharp.Geo;
 /// </summary>
 public class GeoColumn
 {
-    private readonly double[] _latitudes;
-    private readonly double[] _longitudes;
+    // Primary storage: either owned arrays or column references (zero-copy)
+    private readonly double[]? _latArray;
+    private readonly double[]? _lonArray;
+    private readonly Column<double>? _latColumn;
+    private readonly Column<double>? _lonColumn;
 
     public string Name { get; }
-    public int Length => _latitudes.Length;
+    public int Length { get; }
 
     public GeoColumn(string name, double[] latitudes, double[] longitudes)
     {
         if (latitudes.Length != longitudes.Length)
             throw new ArgumentException("Latitude and longitude arrays must have the same length.");
         Name = name;
-        _latitudes = latitudes;
-        _longitudes = longitudes;
+        Length = latitudes.Length;
+        _latArray = latitudes;
+        _lonArray = longitudes;
+    }
+
+    /// <summary>
+    /// Create a GeoColumn backed directly by Column&lt;double&gt; references — no data copy.
+    /// </summary>
+    public GeoColumn(string name, Column<double> latColumn, Column<double> lonColumn)
+    {
+        if (latColumn.Length != lonColumn.Length)
+            throw new ArgumentException("Latitude and longitude columns must have the same length.");
+        Name = name;
+        Length = latColumn.Length;
+        _latColumn = latColumn;
+        _lonColumn = lonColumn;
     }
 
     public GeoColumn(string name, GeoPoint[] points)
     {
         Name = name;
-        _latitudes = new double[points.Length];
-        _longitudes = new double[points.Length];
+        Length = points.Length;
+        _latArray = new double[points.Length];
+        _lonArray = new double[points.Length];
         for (int i = 0; i < points.Length; i++)
         {
-            _latitudes[i] = points[i].Latitude;
-            _longitudes[i] = points[i].Longitude;
+            _latArray[i] = points[i].Latitude;
+            _lonArray[i] = points[i].Longitude;
         }
     }
 
-    public GeoPoint this[int index] => new(_latitudes[index], _longitudes[index]);
+    public GeoPoint this[int index]
+    {
+        get
+        {
+            var lats = Latitudes;
+            var lons = Longitudes;
+            return new GeoPoint(lats[index], lons[index]);
+        }
+    }
 
-    public ReadOnlySpan<double> Latitudes => _latitudes;
-    public ReadOnlySpan<double> Longitudes => _longitudes;
+    public ReadOnlySpan<double> Latitudes => _latColumn is not null ? _latColumn.Values : _latArray;
+    public ReadOnlySpan<double> Longitudes => _lonColumn is not null ? _lonColumn.Values : _lonArray;
 
     /// <summary>
     /// Compute Haversine distance from every point to a target point. Returns km.
     /// </summary>
     public Column<double> DistanceTo(GeoPoint target)
     {
+        var lats = Latitudes;
+        var lons = Longitudes;
         var result = new double[Length];
         for (int i = 0; i < Length; i++)
-            result[i] = GeoOps.HaversineKm(this[i], target);
+            result[i] = GeoOps.HaversineKm(new GeoPoint(lats[i], lons[i]), target);
         return new Column<double>($"{Name}_dist_km", result);
     }
 
@@ -59,8 +87,12 @@ public class GeoColumn
         if (Length != other.Length)
             throw new ArgumentException("GeoColumns must have the same length.");
         var result = new double[Length];
+        var lats = Latitudes;
+        var lons = Longitudes;
+        var oLats = other.Latitudes;
+        var oLons = other.Longitudes;
         for (int i = 0; i < Length; i++)
-            result[i] = GeoOps.HaversineKm(this[i], other[i]);
+            result[i] = GeoOps.HaversineKm(new GeoPoint(lats[i], lons[i]), new GeoPoint(oLats[i], oLons[i]));
         return new Column<double>($"dist_km", result);
     }
 
@@ -70,8 +102,10 @@ public class GeoColumn
     public bool[] Within(BoundingBox bbox)
     {
         var result = new bool[Length];
+        var lats = Latitudes;
+        var lons = Longitudes;
         for (int i = 0; i < Length; i++)
-            result[i] = bbox.Contains(this[i]);
+            result[i] = bbox.Contains(new GeoPoint(lats[i], lons[i]));
         return result;
     }
 
@@ -82,19 +116,22 @@ public class GeoColumn
     public bool[] WithinDistance(GeoPoint target, double radiusKm)
     {
         var result = new bool[Length];
-        double approxDeg = GeoOps.KmToDegrees(radiusKm, target.Latitude);
-        var bbox = BoundingBox.FromPoint(target, approxDeg);
+        var (latDeg, lonDeg) = GeoOps.KmToDegrees(radiusKm, target.Latitude);
+        var bbox = BoundingBox.FromPoint(target, latDeg, lonDeg);
+        var lats = Latitudes;
+        var lons = Longitudes;
 
         for (int i = 0; i < Length; i++)
         {
+            var pt = new GeoPoint(lats[i], lons[i]);
             // Fast reject: bounding box check
-            if (!bbox.Contains(this[i]))
+            if (!bbox.Contains(pt))
             {
                 result[i] = false;
                 continue;
             }
             // Exact check
-            result[i] = GeoOps.HaversineKm(this[i], target) <= radiusKm;
+            result[i] = GeoOps.HaversineKm(pt, target) <= radiusKm;
         }
         return result;
     }
@@ -105,10 +142,12 @@ public class GeoColumn
     public BoundingBox[] Buffer(double radiusKm)
     {
         var result = new BoundingBox[Length];
+        var lats = Latitudes;
+        var lons = Longitudes;
         for (int i = 0; i < Length; i++)
         {
-            double deg = GeoOps.KmToDegrees(radiusKm, _latitudes[i]);
-            result[i] = BoundingBox.FromPoint(this[i], deg);
+            var (latD, lonD) = GeoOps.KmToDegrees(radiusKm, lats[i]);
+            result[i] = BoundingBox.FromPoint(new GeoPoint(lats[i], lons[i]), latD, lonD);
         }
         return result;
     }
@@ -120,14 +159,16 @@ public class GeoColumn
     {
         if (Length == 0)
             return new BoundingBox(0, 0, 0, 0);
-        double minLat = _latitudes[0], maxLat = _latitudes[0];
-        double minLon = _longitudes[0], maxLon = _longitudes[0];
+        var lats = Latitudes;
+        var lons = Longitudes;
+        double minLat = lats[0], maxLat = lats[0];
+        double minLon = lons[0], maxLon = lons[0];
         for (int i = 1; i < Length; i++)
         {
-            if (_latitudes[i] < minLat) minLat = _latitudes[i];
-            if (_latitudes[i] > maxLat) maxLat = _latitudes[i];
-            if (_longitudes[i] < minLon) minLon = _longitudes[i];
-            if (_longitudes[i] > maxLon) maxLon = _longitudes[i];
+            if (lats[i] < minLat) minLat = lats[i];
+            if (lats[i] > maxLat) maxLat = lats[i];
+            if (lons[i] < minLon) minLon = lons[i];
+            if (lons[i] > maxLon) maxLon = lons[i];
         }
         return new BoundingBox(minLat, minLon, maxLat, maxLon);
     }
@@ -136,10 +177,12 @@ public class GeoColumn
     public GeoPoint Centroid()
     {
         double sumLat = 0, sumLon = 0;
+        var lats = Latitudes;
+        var lons = Longitudes;
         for (int i = 0; i < Length; i++)
         {
-            sumLat += _latitudes[i];
-            sumLon += _longitudes[i];
+            sumLat += lats[i];
+            sumLon += lons[i];
         }
         return new GeoPoint(sumLat / Length, sumLon / Length);
     }
@@ -148,8 +191,10 @@ public class GeoColumn
     public Column<double> BearingTo(GeoPoint target)
     {
         var result = new double[Length];
+        var lats = Latitudes;
+        var lons = Longitudes;
         for (int i = 0; i < Length; i++)
-            result[i] = GeoOps.Bearing(this[i], target);
+            result[i] = GeoOps.Bearing(new GeoPoint(lats[i], lons[i]), target);
         return new Column<double>($"{Name}_bearing", result);
     }
 
@@ -168,13 +213,15 @@ public class GeoColumn
         for (int i = 0; i < mask.Length; i++) if (mask[i]) count++;
         var lats = new double[count];
         var lons = new double[count];
+        var srcLats = Latitudes;
+        var srcLons = Longitudes;
         int j = 0;
         for (int i = 0; i < mask.Length; i++)
         {
             if (mask[i])
             {
-                lats[j] = _latitudes[i];
-                lons[j] = _longitudes[i];
+                lats[j] = srcLats[i];
+                lons[j] = srcLons[i];
                 j++;
             }
         }
@@ -186,10 +233,12 @@ public class GeoColumn
     {
         var lats = new double[indices.Length];
         var lons = new double[indices.Length];
+        var srcLats = Latitudes;
+        var srcLons = Longitudes;
         for (int i = 0; i < indices.Length; i++)
         {
-            lats[i] = _latitudes[indices[i]];
-            lons[i] = _longitudes[indices[i]];
+            lats[i] = srcLats[indices[i]];
+            lons[i] = srcLons[indices[i]];
         }
         return new GeoColumn(Name, lats, lons);
     }

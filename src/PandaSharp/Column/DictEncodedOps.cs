@@ -33,7 +33,12 @@ internal class DictEncoding
 
         for (int i = 0; i < n; i++)
         {
-            var s = vals[i] ?? "";
+            var s = vals[i];
+            if (s is null)
+            {
+                codes[i] = -1; // sentinel for null — distinguishes null from ""
+                continue;
+            }
             ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(uniqueMap, s, out bool exists);
             if (!exists)
             {
@@ -53,12 +58,37 @@ internal class DictEncoding
         for (int i = 0; i < Uniques.Length; i++)
             transformedUniques[i] = transform(Uniques[i]);
 
-        // Rebuild string array from transformed uniques + codes (parallel for large data)
-        var result = RebuildFromCodes(transformedUniques);
-        return StringColumn.CreateOwnedNoNulls(name, result!);
+        // Rebuild string array from transformed uniques + codes, preserving nulls
+        var result = RebuildFromCodesNullable(transformedUniques);
+        return StringColumn.CreateOwned(name, result);
     }
 
-    /// <summary>Rebuild an array from lookup table + codes, parallelized for large data.</summary>
+    /// <summary>Rebuild a nullable string array from lookup table + codes, preserving null sentinel (-1).</summary>
+    private string?[] RebuildFromCodesNullable(string[] uniqueValues)
+    {
+        int n = Codes.Length;
+        var result = new string?[n];
+        var codes = Codes;
+        if (n > 1_000_000)
+        {
+            int nThreads = Math.Min(Environment.ProcessorCount, 4);
+            Parallel.For(0, nThreads, t =>
+            {
+                int start = (int)((long)n * t / nThreads);
+                int end = (int)((long)n * (t + 1) / nThreads);
+                for (int j = start; j < end; j++)
+                    result[j] = codes[j] < 0 ? null : uniqueValues[codes[j]];
+            });
+        }
+        else
+        {
+            for (int j = 0; j < n; j++)
+                result[j] = codes[j] < 0 ? null : uniqueValues[codes[j]];
+        }
+        return result;
+    }
+
+    /// <summary>Rebuild an array from lookup table + codes, parallelized for large data. Null codes (-1) get default(T).</summary>
     private T[] RebuildFromCodes<T>(T[] uniqueValues)
     {
         int n = Codes.Length;
@@ -72,13 +102,13 @@ internal class DictEncoding
                 int start = (int)((long)n * t / nThreads);
                 int end = (int)((long)n * (t + 1) / nThreads);
                 for (int j = start; j < end; j++)
-                    result[j] = uniqueValues[codes[j]];
+                    result[j] = codes[j] < 0 ? default! : uniqueValues[codes[j]];
             });
         }
         else
         {
             for (int j = 0; j < n; j++)
-                result[j] = uniqueValues[codes[j]];
+                result[j] = codes[j] < 0 ? default! : uniqueValues[codes[j]];
         }
         return result;
     }

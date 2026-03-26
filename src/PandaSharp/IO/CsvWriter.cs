@@ -64,6 +64,10 @@ public static class CsvWriter
             _ => value.ToString() ?? options.NullRepresentation
         };
 
+        // Normalize backslash-escaped quotes to bare quotes before RFC 4180 quoting
+        if (str.Contains("\\\""))
+            str = str.Replace("\\\"", "\"");
+
         // Quote if contains delimiter, quote, or newline
         if (str.Contains(options.Delimiter) || str.Contains('"') || str.Contains('\n'))
         {

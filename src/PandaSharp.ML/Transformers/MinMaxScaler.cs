@@ -21,14 +21,24 @@ public class MinMaxScaler : ITransformer
         {
             double min = double.MaxValue, max = double.MinValue;
             var col = df[name];
+            bool hasValues = false;
             for (int i = 0; i < col.Length; i++)
             {
                 if (col.IsNull(i)) continue;
+                hasValues = true;
                 double val = TypeHelpers.GetDouble(col, i);
                 if (val < min) min = val;
                 if (val > max) max = val;
             }
-            _params[name] = (min, max == min ? min + 1 : max);
+            // Handle all-null columns: treat as zero range so Transform produces zeros
+            if (!hasValues)
+            {
+                _params[name] = (0, 1);
+            }
+            else
+            {
+                _params[name] = (min, max == min ? min + 1 : max);
+            }
         }
         return this;
     }

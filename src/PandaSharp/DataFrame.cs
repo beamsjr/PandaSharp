@@ -28,6 +28,143 @@ public class DataFrame : IEnumerable<DataFrameRow>
         return new DataFrame(columns);
     }
 
+    /// <summary>
+    /// Create a DataFrame from a 2D double matrix.
+    /// Usage: DataFrame.FromMatrix(new double[,] {{1,2},{3,4}}, new[] {"A", "B"})
+    /// </summary>
+    public static DataFrame FromMatrix(double[,] matrix, string[]? columnNames = null)
+    {
+        int rows = matrix.GetLength(0);
+        int cols = matrix.GetLength(1);
+        columnNames ??= Enumerable.Range(0, cols).Select(i => $"col_{i}").ToArray();
+        if (columnNames.Length != cols)
+            throw new ArgumentException(
+                $"columnNames has {columnNames.Length} names but matrix has {cols} columns.");
+        var columns = new List<Column.IColumn>(cols);
+        for (int c = 0; c < cols; c++)
+        {
+            var values = new double[rows];
+            for (int r = 0; r < rows; r++)
+                values[r] = matrix[r, c];
+            columns.Add(new Column.Column<double>(columnNames[c], values));
+        }
+        return new DataFrame(columns);
+    }
+
+    /// <summary>
+    /// Create a DataFrame from 2-element tuples.
+    /// Usage: DataFrame.FromTuples(["Name", "Age"], ("Alice", 25), ("Bob", 30))
+    /// </summary>
+    public static DataFrame FromTuples<T1, T2>(string[] columnNames, params (T1, T2)[] tuples)
+    {
+        if (columnNames.Length != 2)
+            throw new ArgumentException($"Expected 2 column names for 2-element tuples, got {columnNames.Length}.");
+        var col1 = new object?[tuples.Length];
+        var col2 = new object?[tuples.Length];
+        for (int i = 0; i < tuples.Length; i++)
+        {
+            col1[i] = tuples[i].Item1;
+            col2[i] = tuples[i].Item2;
+        }
+        return new DataFrame(
+            BuildColumnFromObjects(columnNames[0], col1),
+            BuildColumnFromObjects(columnNames[1], col2));
+    }
+
+    /// <summary>
+    /// Create a DataFrame from 3-element tuples.
+    /// </summary>
+    public static DataFrame FromTuples<T1, T2, T3>(string[] columnNames, params (T1, T2, T3)[] tuples)
+    {
+        if (columnNames.Length != 3)
+            throw new ArgumentException($"Expected 3 column names for 3-element tuples, got {columnNames.Length}.");
+        var col1 = new object?[tuples.Length];
+        var col2 = new object?[tuples.Length];
+        var col3 = new object?[tuples.Length];
+        for (int i = 0; i < tuples.Length; i++)
+        {
+            col1[i] = tuples[i].Item1;
+            col2[i] = tuples[i].Item2;
+            col3[i] = tuples[i].Item3;
+        }
+        return new DataFrame(
+            BuildColumnFromObjects(columnNames[0], col1),
+            BuildColumnFromObjects(columnNames[1], col2),
+            BuildColumnFromObjects(columnNames[2], col3));
+    }
+
+    /// <summary>
+    /// Create a DataFrame from 4-element tuples.
+    /// </summary>
+    public static DataFrame FromTuples<T1, T2, T3, T4>(string[] columnNames, params (T1, T2, T3, T4)[] tuples)
+    {
+        if (columnNames.Length != 4)
+            throw new ArgumentException($"Expected 4 column names for 4-element tuples, got {columnNames.Length}.");
+        var col1 = new object?[tuples.Length];
+        var col2 = new object?[tuples.Length];
+        var col3 = new object?[tuples.Length];
+        var col4 = new object?[tuples.Length];
+        for (int i = 0; i < tuples.Length; i++)
+        {
+            col1[i] = tuples[i].Item1;
+            col2[i] = tuples[i].Item2;
+            col3[i] = tuples[i].Item3;
+            col4[i] = tuples[i].Item4;
+        }
+        return new DataFrame(
+            BuildColumnFromObjects(columnNames[0], col1),
+            BuildColumnFromObjects(columnNames[1], col2),
+            BuildColumnFromObjects(columnNames[2], col3),
+            BuildColumnFromObjects(columnNames[3], col4));
+    }
+
+    private static Column.IColumn BuildColumnFromObjects(string name, object?[] values)
+    {
+        if (values.Length == 0)
+            return new Column.StringColumn(name, Array.Empty<string?>());
+        // Detect type from first non-null value
+        Type? type = null;
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] is not null) { type = values[i]!.GetType(); break; }
+        }
+        type ??= typeof(string);
+        if (type == typeof(string))
+            return new Column.StringColumn(name, values.Select(v => v as string).ToArray());
+        if (type == typeof(int))
+        {
+            var arr = new int[values.Length];
+            for (int i = 0; i < values.Length; i++) arr[i] = Convert.ToInt32(values[i]);
+            return new Column.Column<int>(name, arr);
+        }
+        if (type == typeof(double))
+        {
+            var arr = new double[values.Length];
+            for (int i = 0; i < values.Length; i++) arr[i] = Convert.ToDouble(values[i]);
+            return new Column.Column<double>(name, arr);
+        }
+        if (type == typeof(long))
+        {
+            var arr = new long[values.Length];
+            for (int i = 0; i < values.Length; i++) arr[i] = Convert.ToInt64(values[i]);
+            return new Column.Column<long>(name, arr);
+        }
+        if (type == typeof(float))
+        {
+            var arr = new float[values.Length];
+            for (int i = 0; i < values.Length; i++) arr[i] = Convert.ToSingle(values[i]);
+            return new Column.Column<float>(name, arr);
+        }
+        if (type == typeof(bool))
+        {
+            var arr = new bool[values.Length];
+            for (int i = 0; i < values.Length; i++) arr[i] = Convert.ToBoolean(values[i]);
+            return new Column.Column<bool>(name, arr);
+        }
+        // Fallback to string
+        return new Column.StringColumn(name, values.Select(v => v?.ToString()).ToArray());
+    }
+
     private static Column.IColumn BuildColumnFromArray(string name, Array values)
     {
         return values switch
@@ -106,7 +243,8 @@ public class DataFrame : IEnumerable<DataFrameRow>
         get
         {
             if (!_columnIndex.TryGetValue(columnName, out int idx))
-                throw new KeyNotFoundException($"Column '{columnName}' not found.");
+                throw new KeyNotFoundException(
+                    $"Column '{columnName}' not found. Available columns: [{string.Join(", ", ColumnNames.Select(c => $"'{c}'"))}]");
             return _columns[idx];
         }
     }
@@ -116,6 +254,14 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     /// <summary>Access a string column by name.</summary>
     public StringColumn GetStringColumn(string name) => (StringColumn)this[name];
+
+    // -- Boolean indexing --
+
+    /// <summary>Filter rows using a boolean Column mask. Enables df[df["col"].Gt(value)] syntax.</summary>
+    public DataFrame this[Column<bool> mask] => Filter(mask.Values);
+
+    /// <summary>Filter rows using a boolean array mask.</summary>
+    public DataFrame this[bool[] mask] => Filter(mask);
 
     // -- Row access --
 
@@ -157,13 +303,29 @@ public class DataFrame : IEnumerable<DataFrameRow>
     public DataFrame Select(params string[] columns) =>
         new(columns.Select(name => this[name].Clone()));
 
+    /// <summary>
+    /// Split the DataFrame into batches of the specified size.
+    /// The last batch may have fewer rows than batchSize.
+    /// </summary>
+    public IEnumerable<DataFrame> Batch(int batchSize)
+    {
+        if (batchSize <= 0)
+            throw new ArgumentException($"Batch size must be positive, got {batchSize}.");
+        for (int offset = 0; offset < RowCount; offset += batchSize)
+        {
+            int length = Math.Min(batchSize, RowCount - offset);
+            yield return Slice(offset, length);
+        }
+    }
+
     // -- Filter --
 
     /// <summary>Filter rows using a boolean mask.</summary>
     public DataFrame Filter(ReadOnlySpan<bool> mask)
     {
         if (mask.Length != RowCount)
-            throw new ArgumentException("Mask length must match row count.");
+            throw new ArgumentException(
+                $"Filter mask has {mask.Length} elements but DataFrame has {RowCount} rows. Mask length must match row count.");
 
         // Single pass: count and build index array simultaneously
         // Pre-allocate to RowCount (worst case all true), then slice
@@ -362,13 +524,6 @@ public class DataFrame : IEnumerable<DataFrameRow>
         Array.Sort(indices, new SpanComparer<T>(values.ToArray(), ascending));
     }
 
-    private static void SortTyped<T>(int[] indices, ReadOnlySpan<T> values, bool ascending)
-        where T : struct, IComparable<T>
-    {
-        var vals = values.ToArray();
-        Array.Sort(indices, new SpanComparer<T>(vals, ascending));
-    }
-
     private readonly struct SpanComparer<T> : IComparer<int> where T : struct, IComparable<T>
     {
         private readonly T[] _values;
@@ -516,10 +671,28 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
         // Extract sort keys as doubles for comparison
         var keys = new double[RowCount];
-        for (int i = 0; i < RowCount; i++)
+        if (col is Column.Column<double> dc2 && dc2.NullCount == 0)
         {
-            var obj = col.GetObject(i);
-            keys[i] = obj is not null ? Convert.ToDouble(obj) : (ascending ? double.MaxValue : double.MinValue);
+            var span = dc2.Buffer.Span;
+            for (int i = 0; i < RowCount; i++) keys[i] = span[i];
+        }
+        else if (col is Column.Column<int> ic2 && ic2.NullCount == 0)
+        {
+            var span = ic2.Buffer.Span;
+            for (int i = 0; i < RowCount; i++) keys[i] = span[i];
+        }
+        else if (col is Column.Column<float> fc2 && fc2.NullCount == 0)
+        {
+            var span = fc2.Buffer.Span;
+            for (int i = 0; i < RowCount; i++) keys[i] = span[i];
+        }
+        else
+        {
+            for (int i = 0; i < RowCount; i++)
+            {
+                var obj = col.GetObject(i);
+                keys[i] = obj is not null ? Convert.ToDouble(obj) : (ascending ? double.MaxValue : double.MinValue);
+            }
         }
 
         // Quickselect to partition: top-k elements end up in indices[0..k-1]
@@ -628,6 +801,11 @@ public class DataFrame : IEnumerable<DataFrameRow>
         }
         return true;
     }
+
+    /// <summary>
+    /// Alias for ContentEquals. Compares row counts, column names, and all values element-wise.
+    /// </summary>
+    public bool ValueEquals(DataFrame other) => ContentEquals(other);
 
     /// <summary>
     /// Combine two DataFrames element-wise using a function on matching numeric columns.
@@ -779,8 +957,11 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     public DataFrame RenameColumn(string oldName, string newName)
     {
+        if (!_columnIndex.ContainsKey(oldName))
+            throw new KeyNotFoundException(
+                $"Cannot rename: column '{oldName}' not found. Available columns: [{string.Join(", ", ColumnNames.Select(c => $"'{c}'"))}]");
         return new DataFrame(_columns.Select(c =>
-            c.Name == oldName ? c.Clone(newName) : c));
+            c.Name == oldName ? c.RenameOrKeep(newName) : c));
     }
 
     /// <summary>
@@ -789,8 +970,14 @@ public class DataFrame : IEnumerable<DataFrameRow>
     /// </summary>
     public DataFrame RenameColumns(Dictionary<string, string> mapping)
     {
+        foreach (var oldName in mapping.Keys)
+        {
+            if (!_columnIndex.ContainsKey(oldName))
+                throw new KeyNotFoundException(
+                    $"Cannot rename: column '{oldName}' not found. Available columns: [{string.Join(", ", ColumnNames.Select(c => $"'{c}'"))}]");
+        }
         return new DataFrame(_columns.Select(c =>
-            mapping.TryGetValue(c.Name, out var newName) ? c.Clone(newName) : c));
+            mapping.TryGetValue(c.Name, out var newName) ? c.RenameOrKeep(newName) : c));
     }
 
     /// <summary>
@@ -926,20 +1113,43 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 var seen = new HashSet<long>(Math.Min(RowCount, (int)Math.Min(keySpace, int.MaxValue)));
                 for (int r = 0; r < RowCount; r++)
                 {
-                    long key = ((long)codes1[r] << 20) | (uint)codes2[r];
+                    long key = (long)codes1[r] * nUniques2 + codes2[r];
                     keepMask[r] = seen.Add(key);
                 }
             }
         }
         else
         {
-            var seen = new HashSet<long>(RowCount / 4);
+            // Hash + equality check to avoid false dedup from hash collisions
             var arrays = cols.Select(c => c.GetValues()).ToArray();
+            var buckets = new Dictionary<int, List<int>>();
             for (int r = 0; r < RowCount; r++)
             {
                 var hash = new HashCode();
                 foreach (var arr in arrays) hash.Add(arr[r]);
-                keepMask[r] = seen.Add(hash.ToHashCode());
+                int h = hash.ToHashCode();
+
+                if (!buckets.TryGetValue(h, out var bucket))
+                {
+                    bucket = new List<int> { r };
+                    buckets[h] = bucket;
+                    keepMask[r] = true;
+                    continue;
+                }
+
+                bool isDuplicate = false;
+                foreach (var prev in bucket)
+                {
+                    bool allEqual = true;
+                    for (int c = 0; c < arrays.Length; c++)
+                    {
+                        if (!string.Equals(arrays[c][r], arrays[c][prev], StringComparison.Ordinal))
+                        { allEqual = false; break; }
+                    }
+                    if (allEqual) { isDuplicate = true; break; }
+                }
+                keepMask[r] = !isDuplicate;
+                if (!isDuplicate) bucket.Add(r);
             }
         }
 

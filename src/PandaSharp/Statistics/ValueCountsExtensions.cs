@@ -67,8 +67,8 @@ public static class ValueCountsExtensions
         if (column is StringColumn sc)
         {
             var (_, uniques) = sc.GetDictCodes();
-            // Subtract 1 if nulls are encoded as "" (dict encoding maps null → "")
-            return sc.NullCount > 0 ? uniques.Length - 1 : uniques.Length;
+            // Nulls use sentinel code -1 and are not in Uniques array
+            return uniques.Length;
         }
 
         var unique = new HashSet<object>();

@@ -257,23 +257,47 @@ internal sealed class DataFrameDataView : IDataView
 
             if (dvType == NumberDataViewType.Int32)
             {
-                ValueGetter<int> getter = (ref int value) =>
+                // Typed fast path: read directly from Column<int> to avoid boxing via GetObject()
+                ValueGetter<int> getter;
+                if (col is Column<int> intCol)
                 {
-                    int row = _rowOrder[_position];
-                    var obj = col.GetObject(row);
-                    value = obj is int i ? i : (obj is not null ? Convert.ToInt32(obj) : 0);
-                };
+                    getter = (ref int value) =>
+                    {
+                        int row = _rowOrder[_position];
+                        value = col.IsNull(row) ? 0 : intCol.Values[row];
+                    };
+                }
+                else
+                {
+                    getter = (ref int value) =>
+                    {
+                        int row = _rowOrder[_position];
+                        value = col.IsNull(row) ? 0 : (int)TypeHelpers.GetDouble(col, row);
+                    };
+                }
                 return (ValueGetter<TValue>)(Delegate)getter;
             }
 
             if (dvType == NumberDataViewType.Int64)
             {
-                ValueGetter<long> getter = (ref long value) =>
+                // Typed fast path: read directly from Column<long> to avoid boxing via GetObject()
+                ValueGetter<long> getter;
+                if (col is Column<long> longCol)
                 {
-                    int row = _rowOrder[_position];
-                    var obj = col.GetObject(row);
-                    value = obj is long l ? l : (obj is not null ? Convert.ToInt64(obj) : 0);
-                };
+                    getter = (ref long value) =>
+                    {
+                        int row = _rowOrder[_position];
+                        value = col.IsNull(row) ? 0L : longCol.Values[row];
+                    };
+                }
+                else
+                {
+                    getter = (ref long value) =>
+                    {
+                        int row = _rowOrder[_position];
+                        value = col.IsNull(row) ? 0L : (long)TypeHelpers.GetDouble(col, row);
+                    };
+                }
                 return (ValueGetter<TValue>)(Delegate)getter;
             }
 

@@ -1,6 +1,6 @@
 using FluentAssertions;
 using PandaSharp.Column;
-using PandaSharp.Compare;
+// DataFrameCompareExtensions is now in PandaSharp namespace
 
 namespace PandaSharp.Tests.Unit.Compare;
 

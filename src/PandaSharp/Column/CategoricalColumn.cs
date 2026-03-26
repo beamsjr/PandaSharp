@@ -68,8 +68,7 @@ public class CategoricalColumn : IColumn
     {
         var codes = new int[length];
         Array.Copy(_codes, offset, codes, 0, length);
-        int nulls = codes.Count(c => c < 0);
-        return new CategoricalColumn(Name, _dictionary, codes, nulls);
+        return new CategoricalColumn(Name, _dictionary, codes, CountNullCodes(codes));
     }
 
     public IColumn Clone(string? newName = null) =>
@@ -84,8 +83,7 @@ public class CategoricalColumn : IColumn
         int j = 0;
         for (int i = 0; i < mask.Length; i++)
             if (mask[i]) codes[j++] = _codes[i];
-        int nulls = codes.Count(c => c < 0);
-        return new CategoricalColumn(Name, _dictionary, codes, nulls);
+        return new CategoricalColumn(Name, _dictionary, codes, CountNullCodes(codes));
     }
 
     public IColumn TakeRows(ReadOnlySpan<int> indices)
@@ -93,8 +91,15 @@ public class CategoricalColumn : IColumn
         var codes = new int[indices.Length];
         for (int i = 0; i < indices.Length; i++)
             codes[i] = _codes[indices[i]];
-        int nulls = codes.Count(c => c < 0);
-        return new CategoricalColumn(Name, _dictionary, codes, nulls);
+        return new CategoricalColumn(Name, _dictionary, codes, CountNullCodes(codes));
+    }
+
+    private static int CountNullCodes(int[] codes)
+    {
+        int nulls = 0;
+        for (int i = 0; i < codes.Length; i++)
+            if (codes[i] < 0) nulls++;
+        return nulls;
     }
 
     /// <summary>

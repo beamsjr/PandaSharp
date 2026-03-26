@@ -82,6 +82,12 @@ public class ILocAccessor
     {
         get
         {
+            for (int i = 0; i < indices.Length; i++)
+            {
+                if (indices[i] < 0 || indices[i] >= _df.RowCount)
+                    throw new ArgumentOutOfRangeException(nameof(indices),
+                        $"Index {indices[i]} is out of range. DataFrame has {_df.RowCount} rows (valid range: 0..{_df.RowCount - 1}).");
+            }
             return new DataFrame(
                 _df.ColumnNames.Select(name => _df[name].TakeRows(indices)));
         }

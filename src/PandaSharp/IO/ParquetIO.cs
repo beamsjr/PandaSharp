@@ -56,7 +56,7 @@ public static class ParquetIO
             {
                 var col = await rgReader.ReadColumnAsync(fields[i]);
                 builders[i].Add(col.Data);
-                if (rg == 0 || i == 0) // count from first field only
+                if (i == 0) // count rows once per row group, from first field only
                     totalRows += col.Data.Length;
             }
         }

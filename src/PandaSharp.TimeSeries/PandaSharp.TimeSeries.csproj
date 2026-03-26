@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.TimeSeries</RootNamespace>
+    <PackageId>PandaSharp.TimeSeries</PackageId>
+    <Description>Time series forecasting and analysis for PandaSharp: ARIMA, exponential smoothing, seasonal decomposition, stationarity tests</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
+  </ItemGroup>
+</Project>

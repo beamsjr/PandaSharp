@@ -53,27 +53,43 @@ public static class DescribeExtensions
         int count = n - col.NullCount;
         if (count == 0) return [0, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN];
 
-        // Pass 1: mean + std + min + max (single streaming pass — no sort needed)
+        // Compact non-null values (null positions have default 0.0 which would corrupt stats)
         var span = col.Buffer.Span;
-        double sum = 0, mn = double.MaxValue, mx = double.MinValue;
-        for (int i = 0; i < n; i++)
+        double[] data;
+        if (col.NullCount == 0)
         {
-            double v = span[i];
+            data = span.ToArray();
+        }
+        else
+        {
+            data = new double[count];
+            int j = 0;
+            for (int i = 0; i < n; i++)
+                if (!col.IsNull(i)) data[j++] = span[i];
+        }
+
+        // Pass 1: mean + std + min + max from compacted data
+        double sum = 0, mn = double.MaxValue, mx = double.MinValue;
+        bool allNaN = true;
+        for (int i = 0; i < count; i++)
+        {
+            double v = data[i];
+            if (double.IsNaN(v)) continue;
+            allNaN = false;
             sum += v;
             if (v < mn) mn = v;
             if (v > mx) mx = v;
         }
+        if (allNaN) return [count, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN];
         double mean = sum / count;
         double sumSq = 0;
-        for (int i = 0; i < n; i++) { double d = span[i] - mean; sumSq += d * d; }
+        for (int i = 0; i < count; i++) { double d = data[i] - mean; sumSq += d * d; }
         double std = count > 1 ? Math.Sqrt(sumSq / (count - 1)) : 0;
 
-        // O(n) quantiles using successive quickselect (avoids O(n log n) sort)
-        var data = span.ToArray();
-        int k25 = (int)(0.25 * (count - 1));
-        int k50 = (int)(0.50 * (count - 1));
-        int k75 = (int)(0.75 * (count - 1));
-        // Quickselect in order: each narrows the search range
+        // O(n) quantiles using successive quickselect on compacted data
+        int k25 = Math.Min((int)(0.25 * (count - 1)), count - 1);
+        int k50 = Math.Min((int)(0.50 * (count - 1)), count - 1);
+        int k75 = Math.Min((int)(0.75 * (count - 1)), count - 1);
         QuickSelect(data, 0, count - 1, k25);
         double q25 = data[k25];
         QuickSelect(data, k25, count - 1, k50);
@@ -113,14 +129,25 @@ public static class DescribeExtensions
         if (count == 0) return [0, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN];
 
         var span = col.Buffer.Span;
-        var doubles = new double[n];
-        for (int i = 0; i < n; i++) doubles[i] = double.CreateChecked(span[i]);
+        double[] doubles;
+        if (col.NullCount == 0)
+        {
+            doubles = new double[n];
+            for (int i = 0; i < n; i++) doubles[i] = double.CreateChecked(span[i]);
+        }
+        else
+        {
+            doubles = new double[count];
+            int j = 0;
+            for (int i = 0; i < n; i++)
+                if (!col.IsNull(i)) doubles[j++] = double.CreateChecked(span[i]);
+        }
 
         double sum = 0, mn = double.MaxValue, mx = double.MinValue;
-        for (int i = 0; i < n; i++) { sum += doubles[i]; if (doubles[i] < mn) mn = doubles[i]; if (doubles[i] > mx) mx = doubles[i]; }
+        for (int i = 0; i < count; i++) { sum += doubles[i]; if (doubles[i] < mn) mn = doubles[i]; if (doubles[i] > mx) mx = doubles[i]; }
         double mean = sum / count;
         double sumSq = 0;
-        for (int i = 0; i < n; i++) { double d = doubles[i] - mean; sumSq += d * d; }
+        for (int i = 0; i < count; i++) { double d = doubles[i] - mean; sumSq += d * d; }
         double std = count > 1 ? Math.Sqrt(sumSq / (count - 1)) : 0;
 
         int k25 = (int)(0.25 * (count - 1));

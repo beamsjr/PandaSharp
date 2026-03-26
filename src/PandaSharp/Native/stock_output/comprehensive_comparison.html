@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>PandaSharp vs Python — Comprehensive Benchmark</title>
+<script src='https://cdn.plot.ly/plotly-2.35.2.min.js'></script>
+<style>
+:root {
+    --bg: #ffffff; --fg: #1a1a2e; --fg-muted: #6c757d;
+    --card-bg: #f8f9fa; --card-border: #e9ecef; --accent: #0f3460;
+    --callout-info: #3498db; --callout-warn: #f39c12; --callout-success: #27ae60; --callout-note: #8e44ad;
+    --table-border: #dee2e6; --table-stripe: #f8f9fa; --code-bg: #f1f3f5;
+    --divider: #dee2e6;
+}
+body.story-dark {
+    --bg: #1a1a2e; --fg: #e8e8e8; --fg-muted: #8899aa;
+    --card-bg: #16213e; --card-border: #0f3460; --accent: #5dade2;
+    --table-border: #2c3e50; --table-stripe: #16213e; --code-bg: #2c3e50;
+    --divider: #2c3e50;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; }
+.story-container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+.story-meta { text-align: center; color: var(--fg-muted); font-size: 0.9em; margin-bottom: 32px; }
+h1.story-title { text-align: center; font-size: 2.2em; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+h2 { font-size: 1.6em; font-weight: 600; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+h3 { font-size: 1.2em; font-weight: 600; margin: 24px 0 12px; }
+p { margin: 12px 0; font-size: 1.05em; line-height: 1.7; }
+code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 24px 0; }
+.stat-card { flex: 1; min-width: 140px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 20px; text-align: center; }
+.stat-value { font-size: 1.8em; font-weight: 700; color: var(--accent); }
+.stat-label { font-size: 0.85em; color: var(--fg-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.story-chart { margin: 24px 0; border-radius: 8px; overflow: hidden; }
+.chart-caption { text-align: center; font-size: 0.9em; color: var(--fg-muted); font-style: italic; margin-top: -8px; }
+
+.callout { border-left: 4px solid var(--callout-info); padding: 16px 20px; margin: 20px 0; background: var(--card-bg); border-radius: 0 8px 8px 0; font-size: 1em; }
+.callout-warning { border-left-color: var(--callout-warn); }
+.callout-success { border-left-color: var(--callout-success); }
+.callout-note { border-left-color: var(--callout-note); }
+
+.story-table { margin: 20px 0; overflow-x: auto; }
+.story-table table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
+.story-table th { background: var(--card-bg); font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--table-border); }
+.story-table td { padding: 8px 12px; border-bottom: 1px solid var(--table-border); }
+.story-table tbody tr:nth-child(even) { background: var(--table-stripe); }
+.story-table .null { color: var(--fg-muted); font-style: italic; }
+.table-caption { font-weight: 600; font-size: 1em; margin-bottom: 4px; }
+.table-truncated { font-size: 0.85em; color: var(--fg-muted); text-align: center; margin-top: 8px; }
+
+.story-divider { border: none; border-top: 1px solid var(--divider); margin: 40px 0; }
+
+.story-row { display: flex; gap: 24px; margin: 24px 0; }
+.row-cell { flex: 1; min-width: 0; }
+
+.story-footer { text-align: center; color: var(--fg-muted); font-size: 0.8em; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--divider); }
+
+@media (max-width: 640px) {
+    .stats-row { flex-direction: column; }
+    .story-row { flex-direction: column; }
+    .story-container { padding: 20px 16px; }
+    h1.story-title { font-size: 1.6em; }
+}
+</style>
+</head>
+<body class='story-light'>
+<div class='story-container'>
+<div class='story-meta'>Head-to-Head across 8 Categories &middot; March 25, 2026</div>
+<h1 class='story-title'>PandaSharp vs Python — Comprehensive Benchmark</h1>
+<div class='stats-row'>
+<div class='stat-card'>
+<div class='stat-value'>15,299 ms</div>
+<div class='stat-label'>PandaSharp Total</div>
+</div>
+<div class='stat-card'>
+<div class='stat-value'>21,049 ms</div>
+<div class='stat-label'>Python Total</div>
+</div>
+<div class='stat-card'>
+<div class='stat-value'>7</div>
+<div class='stat-label'>PS Wins</div>
+</div>
+<div class='stat-card'>
+<div class='stat-value'>11</div>
+<div class='stat-label'>Python Wins</div>
+</div>
+</div>
+<p><strong>24</strong> operations across <strong>8 categories</strong> tested on <strong>14,735,362</strong> stock market rows. PandaSharp wins <strong>7</strong> operations, Python wins <strong>11</strong>.</p>
+<h2>Category Totals</h2>
+<p class='table-caption'>Total time per category (ms)</p>
+<div class='story-table'>
+<table>
+<thead><tr>
+<th>Category</th>
+<th>PandaSharp_ms</th>
+<th>Python_ms</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Setup</td>
+<td>10147</td>
+<td>7163</td>
+</tr>
+<tr>
+<td>StarJoin</td>
+<td>640</td>
+<td>502</td>
+</tr>
+<tr>
+<td>String</td>
+<td>904</td>
+<td>800</td>
+</tr>
+<tr>
+<td>Reshape</td>
+<td>203</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Window</td>
+<td>299</td>
+<td>2794</td>
+</tr>
+<tr>
+<td>ETL</td>
+<td>732</td>
+<td>978</td>
+</tr>
+<tr>
+<td>MultiAgg</td>
+<td>1048</td>
+<td>1026</td>
+</tr>
+<tr>
+<td>Expr</td>
+<td>320</td>
+<td>164</td>
+</tr>
+<tr>
+<td>Corr</td>
+<td>1006</td>
+<td>7617</td>
+</tr>
+</tbody></table>
+</div>
+<h2>Full Operation Breakdown</h2>
+<p class='table-caption'>All operations — lower is better</p>
+<div class='story-table'>
+<table>
+<thead><tr>
+<th>Operation</th>
+<th>PandaSharp_ms</th>
+<th>Python_ms</th>
+<th>Winner</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Load all CSVs</td>
+<td>10147</td>
+<td>7163</td>
+<td>Py 1.4x</td>
+</tr>
+<tr>
+<td>JoinMany: fact × 4 dimensions (int key)</td>
+<td>640</td>
+<td>0</td>
+<td>—</td>
+</tr>
+<tr>
+<td>str.upper()</td>
+<td>188</td>
+<td>99</td>
+<td>Py 1.9x</td>
+</tr>
+<tr>
+<td>str.lower()</td>
+<td>393</td>
+<td>104</td>
+<td>Py 3.8x</td>
+</tr>
+<tr>
+<td>str.contains('A')</td>
+<td>55</td>
+<td>322</td>
+<td>PS 5.9x</td>
+</tr>
+<tr>
+<td>str.len()</td>
+<td>51</td>
+<td>31</td>
+<td>Py 1.6x</td>
+</tr>
+<tr>
+<td>str.startswith('AA')</td>
+<td>52</td>
+<td>49</td>
+<td>Py 1.1x</td>
+</tr>
+<tr>
+<td>str.replace('A','X')</td>
+<td>84</td>
+<td>109</td>
+<td>PS 1.3x</td>
+</tr>
+<tr>
+<td>str.slice(0,2)</td>
+<td>81</td>
+<td>86</td>
+<td>PS 1.1x</td>
+</tr>
+<tr>
+<td>Pivot table (20 tickers)</td>
+<td>2</td>
+<td>3</td>
+<td>PS 1.5x</td>
+</tr>
+<tr>
+<td>Melt</td>
+<td>199</td>
+<td>0</td>
+<td>—</td>
+</tr>
+<tr>
+<td>get_dummies (20 tickers)</td>
+<td>0</td>
+<td>0</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Crosstab (ticker × date)</td>
+<td>2</td>
+<td>0</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GroupBy Rolling SMA20 (all stocks)</td>
+<td>157</td>
+<td>948</td>
+<td>PS 6.0x</td>
+</tr>
+<tr>
+<td>GroupBy Expanding Max (all stocks)</td>
+<td>142</td>
+<td>963</td>
+<td>PS 6.8x</td>
+</tr>
+<tr>
+<td>Null detection (all columns)</td>
+<td>0</td>
+<td>69</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Drop duplicates (Ticker+Date)</td>
+<td>677</td>
+<td>871</td>
+<td>PS 1.3x</td>
+</tr>
+<tr>
+<td>Clip values [0, 10000]</td>
+<td>55</td>
+<td>16</td>
+<td>Py 3.4x</td>
+</tr>
+<tr>
+<td>7-function named agg (native)</td>
+<td>329</td>
+<td>0</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Multi-key GroupBy (Sector×Exchange)</td>
+<td>719</td>
+<td>508</td>
+<td>Py 1.4x</td>
+</tr>
+</tbody></table>
+<p class='table-truncated'>Showing 20 of 24 rows</p>
+</div>
+<div class='callout callout-success'>PandaSharp is <strong>1.4x faster</strong> overall!</div>
+<footer class='story-footer'>Generated with PandaSharp</footer>
+</div>
+</body></html>

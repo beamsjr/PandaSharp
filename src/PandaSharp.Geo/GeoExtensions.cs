@@ -15,7 +15,7 @@ public static class GeoExtensions
     {
         var latCol = df.GetColumn<double>(latColumn);
         var lonCol = df.GetColumn<double>(lonColumn);
-        return new GeoColumn(name, latCol.Values.ToArray(), lonCol.Values.ToArray());
+        return new GeoColumn(name, latCol, lonCol);
     }
 
     /// <summary>

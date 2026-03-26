@@ -1,0 +1,22 @@
+[
+  {
+    "category": "SafeTensors",
+    "op": "Write 10 tensors (~10MB)",
+    "ms": 2
+  },
+  {
+    "category": "SafeTensors",
+    "op": "Read 10 tensors (~10MB)",
+    "ms": 1
+  },
+  {
+    "category": "SafeTensors",
+    "op": "Write 50 tensors (~50MB)",
+    "ms": 8
+  },
+  {
+    "category": "SafeTensors",
+    "op": "Read 50 tensors (~50MB)",
+    "ms": 5
+  }
+]

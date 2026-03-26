@@ -33,6 +33,8 @@ public class TextVectorizer : ITransformer
         // Build vocabulary: word → document frequency
         var wordDocFreq = new Dictionary<string, int>();
         var wordFreq = new Dictionary<string, int>();
+        // Reuse across rows to avoid per-document allocation
+        var wordsInDoc = new HashSet<string>();
 
         for (int i = 0; i < col.Length; i++)
         {
@@ -40,7 +42,7 @@ public class TextVectorizer : ITransformer
             if (text is null) continue;
             nDocs++;
 
-            var wordsInDoc = new HashSet<string>();
+            wordsInDoc.Clear();
             foreach (var word in Tokenize(text))
             {
                 wordFreq[word] = wordFreq.GetValueOrDefault(word) + 1;
@@ -77,44 +79,57 @@ public class TextVectorizer : ITransformer
         if (_vocabulary is null) throw new InvalidOperationException("Call Fit() first.");
 
         var col = df[_column];
-        var vocabIndex = new Dictionary<string, int>();
-        for (int v = 0; v < _vocabulary.Length; v++)
+        int vocabLength = _vocabulary.Length;
+        int rows = df.RowCount;
+        var vocabIndex = new Dictionary<string, int>(vocabLength);
+        for (int v = 0; v < vocabLength; v++)
             vocabIndex[_vocabulary[v]] = v;
 
-        // Build feature matrix
-        var features = new double[df.RowCount * _vocabulary.Length];
+        // Build columns directly — avoids allocating a flat rows*vocab matrix
+        var columnData = new double[vocabLength][];
+        for (int v = 0; v < vocabLength; v++)
+            columnData[v] = new double[rows];
 
-        for (int r = 0; r < df.RowCount; r++)
+        // Reuse across rows to avoid per-document allocation
+        var termCounts = new Dictionary<string, int>();
+
+        for (int r = 0; r < rows; r++)
         {
             var text = col.GetObject(r)?.ToString();
             if (text is null) continue;
 
-            // Count term frequencies
-            var termCounts = new Dictionary<string, int>();
+            // Count term frequencies — reuse dictionary, count words inline
+            termCounts.Clear();
+            int totalWords = 0;
             foreach (var word in Tokenize(text))
+            {
                 termCounts[word] = termCounts.GetValueOrDefault(word) + 1;
+                totalWords++;
+            }
 
             foreach (var (word, count) in termCounts)
             {
                 if (vocabIndex.TryGetValue(word, out int idx))
                 {
-                    double value = count;
+                    double value;
                     if (_mode == VectorizerMode.TfIdf)
-                        value *= _idfWeights![idx];
-                    features[r * _vocabulary.Length + idx] = value;
+                    {
+                        double tf = totalWords > 0 ? (double)count / totalWords : 0;
+                        value = tf * _idfWeights![idx];
+                    }
+                    else
+                    {
+                        value = count;
+                    }
+                    columnData[idx][r] = value;
                 }
             }
         }
 
         // Build output DataFrame: drop original column, add feature columns
         var result = df.DropColumn(_column);
-        for (int v = 0; v < _vocabulary.Length; v++)
-        {
-            var colData = new double[df.RowCount];
-            for (int r = 0; r < df.RowCount; r++)
-                colData[r] = features[r * _vocabulary.Length + v];
-            result = result.AddColumn(new Column<double>($"{_column}_{_vocabulary[v]}", colData));
-        }
+        for (int v = 0; v < vocabLength; v++)
+            result = result.AddColumn(new Column<double>($"{_column}_{_vocabulary[v]}", columnData[v]));
 
         return result;
     }

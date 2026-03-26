@@ -14,37 +14,31 @@ public static class ReshapeExtensions
         var colCol = df[columns];
         var valCol = df[values];
 
-        // Get unique index values and pivot column values
+        // Single pass: build unique index/column maps and value lookup simultaneously
         var uniqueIndex = new List<object?>();
         var indexMap = new Dictionary<object?, int>(new ObjectEqualityComparer());
-        for (int i = 0; i < df.RowCount; i++)
-        {
-            var val = indexCol.GetObject(i);
-            if (!indexMap.ContainsKey(val))
-            {
-                indexMap[val] = uniqueIndex.Count;
-                uniqueIndex.Add(val);
-            }
-        }
-
         var uniqueCols = new List<object?>();
         var colMap = new Dictionary<object?, int>(new ObjectEqualityComparer());
-        for (int i = 0; i < df.RowCount; i++)
-        {
-            var val = colCol.GetObject(i);
-            if (!colMap.ContainsKey(val))
-            {
-                colMap[val] = uniqueCols.Count;
-                uniqueCols.Add(val);
-            }
-        }
-
-        // Build lookup: (indexPos, colPos) → value — O(1) per row via dictionaries
         var lookup = new Dictionary<(int, int), object?>();
+
         for (int i = 0; i < df.RowCount; i++)
         {
-            int idxPos = indexMap[indexCol.GetObject(i)];
-            int colPos = colMap[colCol.GetObject(i)];
+            var idxVal = indexCol.GetObject(i);
+            if (!indexMap.TryGetValue(idxVal, out int idxPos))
+            {
+                idxPos = uniqueIndex.Count;
+                indexMap[idxVal] = idxPos;
+                uniqueIndex.Add(idxVal);
+            }
+
+            var colVal = colCol.GetObject(i);
+            if (!colMap.TryGetValue(colVal, out int colPos))
+            {
+                colPos = uniqueCols.Count;
+                colMap[colVal] = colPos;
+                uniqueCols.Add(colVal);
+            }
+
             lookup[(idxPos, colPos)] = valCol.GetObject(i);
         }
 

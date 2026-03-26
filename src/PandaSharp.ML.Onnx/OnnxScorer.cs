@@ -13,7 +13,6 @@ public class OnnxScorer : IDisposable
 {
     private readonly InferenceSession _session;
     private readonly string _inputName;
-    private readonly int _inputWidth;
 
     /// <summary>Load an ONNX model from a file path.</summary>
     public OnnxScorer(string modelPath)
@@ -21,7 +20,6 @@ public class OnnxScorer : IDisposable
         _session = new InferenceSession(modelPath);
         var inputMeta = _session.InputMetadata.First();
         _inputName = inputMeta.Key;
-        _inputWidth = inputMeta.Value.Dimensions.Length > 1 ? inputMeta.Value.Dimensions[1] : 1;
     }
 
     /// <summary>Load an ONNX model from bytes.</summary>
@@ -30,7 +28,6 @@ public class OnnxScorer : IDisposable
         _session = new InferenceSession(modelBytes);
         var inputMeta = _session.InputMetadata.First();
         _inputName = inputMeta.Key;
-        _inputWidth = inputMeta.Value.Dimensions.Length > 1 ? inputMeta.Value.Dimensions[1] : 1;
     }
 
     /// <summary>
@@ -46,8 +43,15 @@ public class OnnxScorer : IDisposable
         for (int c = 0; c < cols; c++)
         {
             var col = df[inputColumns[c]];
-            for (int r = 0; r < rows; r++)
-                inputData[r * cols + c] = col.IsNull(r) ? 0f : Convert.ToSingle(col.GetObject(r));
+            // Typed fast path to avoid boxing via GetObject()
+            if (col is Column.Column<double> dc)
+                for (int r = 0; r < rows; r++) inputData[r * cols + c] = (float)dc.Values[r];
+            else if (col is Column.Column<float> fc)
+                for (int r = 0; r < rows; r++) inputData[r * cols + c] = fc.Values[r];
+            else if (col is Column.Column<int> ic)
+                for (int r = 0; r < rows; r++) inputData[r * cols + c] = ic.Values[r];
+            else
+                for (int r = 0; r < rows; r++) inputData[r * cols + c] = col.IsNull(r) ? 0f : Convert.ToSingle(col.GetObject(r));
         }
 
         var inputTensor = new DenseTensor<float>(inputData, [rows, cols]);
@@ -85,11 +89,14 @@ public class OnnxScorer : IDisposable
             for (int c = 0; c < cols; c++)
             {
                 var col = df[inputColumns[c]];
-                for (int r = 0; r < batchLen; r++)
-                {
-                    int srcRow = start + r;
-                    inputData[r * cols + c] = col.IsNull(srcRow) ? 0f : Convert.ToSingle(col.GetObject(srcRow));
-                }
+                if (col is Column.Column<double> dc)
+                    for (int r = 0; r < batchLen; r++) inputData[r * cols + c] = (float)dc.Values[start + r];
+                else if (col is Column.Column<float> fc)
+                    for (int r = 0; r < batchLen; r++) inputData[r * cols + c] = fc.Values[start + r];
+                else if (col is Column.Column<int> ic)
+                    for (int r = 0; r < batchLen; r++) inputData[r * cols + c] = ic.Values[start + r];
+                else
+                    for (int r = 0; r < batchLen; r++) { int srcRow = start + r; inputData[r * cols + c] = col.IsNull(srcRow) ? 0f : Convert.ToSingle(col.GetObject(srcRow)); }
             }
 
             var inputTensor = new DenseTensor<float>(inputData, [batchLen, cols]);

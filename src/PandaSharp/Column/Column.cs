@@ -78,4 +78,38 @@ public class Column<T> : IColumn where T : struct
         new Column<T>(Name, Buffer.TakeRows(indices), Nulls.TakeRows(indices));
 
     public int Count() => Length - NullCount;
+
+    // -- Arithmetic operators --
+    // These delegate to ColumnArithmetic extension methods via ArithmeticDispatch,
+    // which caches the reflection lookup so only the first call per T pays the cost.
+
+    public static Column<T> operator +(Column<T> left, Column<T> right)
+        => ArithmeticDispatch<T>.Add(left, right);
+
+    public static Column<T> operator -(Column<T> left, Column<T> right)
+        => ArithmeticDispatch<T>.Subtract(left, right);
+
+    public static Column<T> operator *(Column<T> left, Column<T> right)
+        => ArithmeticDispatch<T>.Multiply(left, right);
+
+    public static Column<T> operator /(Column<T> left, Column<T> right)
+        => ArithmeticDispatch<T>.Divide(left, right);
+
+    public static Column<T> operator +(Column<T> col, T scalar)
+        => ArithmeticDispatch<T>.AddScalar(col, scalar);
+
+    public static Column<T> operator -(Column<T> col, T scalar)
+        => ArithmeticDispatch<T>.SubtractScalar(col, scalar);
+
+    public static Column<T> operator *(Column<T> col, T scalar)
+        => ArithmeticDispatch<T>.MultiplyScalar(col, scalar);
+
+    public static Column<T> operator *(T scalar, Column<T> col)
+        => ArithmeticDispatch<T>.MultiplyScalar(col, scalar);
+
+    public static Column<T> operator /(Column<T> col, T scalar)
+        => ArithmeticDispatch<T>.DivideScalar(col, scalar);
+
+    public static Column<T> operator -(Column<T> col)
+        => ArithmeticDispatch<T>.Negate(col);
 }

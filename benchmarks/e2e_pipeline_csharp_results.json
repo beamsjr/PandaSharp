@@ -1,0 +1,246 @@
+{
+  "language": "csharp",
+  "rows": 500000,
+  "results": [
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1a. Load into DataFrame",
+      "ms": 9.29,
+      "detail": "500,000 rows"
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1b. Clean \u002B feature engineer (DataFrame)",
+      "ms": 82.71,
+      "detail": "470,118 rows after clean"
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1c. StandardScaler fit\u002Btransform (DataFrame)",
+      "ms": 18.77,
+      "detail": ""
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1d. Train/test split (DataFrame)",
+      "ms": 28.68,
+      "detail": "train=376,094, test=94,024"
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1e. DataFrame \u2192 Tensor (internal)",
+      "ms": 7.14,
+      "detail": ""
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1f. Train RandomForest (100 trees)",
+      "ms": 3294.54,
+      "detail": ""
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1g. Predict \u002B evaluate",
+      "ms": 68.91,
+      "detail": "acc=1.0000, f1=1.0000"
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "1h. Build results DataFrame (no conversion)",
+      "ms": 1.95,
+      "detail": "result: (94024, 3)"
+    },
+    {
+      "workflow": "ML Pipeline",
+      "operation": "TOTAL",
+      "ms": 3511.99,
+      "detail": ""
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2a. Generate time series (DataFrame)",
+      "ms": 2.93,
+      "detail": "4,018 daily observations"
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2b. Resample to monthly (DataFrame)",
+      "ms": 5.79,
+      "detail": "132 months"
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2c. Seasonal decomposition (native)",
+      "ms": 1.87,
+      "detail": ""
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2d. Holt-Winters fit (native)",
+      "ms": 6.03,
+      "detail": ""
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2e. Forecast 12 months",
+      "ms": 0.16,
+      "detail": "forecast len=12"
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2f. Evaluate (MAE, RMSE)",
+      "ms": 0.08,
+      "detail": "MAE=4.09, RMSE=4.46"
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "2g. Build results DataFrame (no conversion)",
+      "ms": 0.01,
+      "detail": "result: (12, 2)"
+    },
+    {
+      "workflow": "TimeSeries",
+      "operation": "TOTAL",
+      "ms": 16.86,
+      "detail": ""
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3a. Load locations (DataFrame)",
+      "ms": 6.63,
+      "detail": "500,000 rows"
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3b. Create GeoColumn (no conversion)",
+      "ms": 0.12,
+      "detail": "GeoColumn: 500,000 points"
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3c. Spatial region assignment",
+      "ms": 164.9,
+      "detail": "30 regions"
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3d. GroupBy region \u002B aggregate",
+      "ms": 16.86,
+      "detail": "30 regions aggregated"
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3e. Haversine distances (native)",
+      "ms": 5.69,
+      "detail": "distances computed for 500,000 points"
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "3f. Results already DataFrame (no conversion)",
+      "ms": 0,
+      "detail": ""
+    },
+    {
+      "workflow": "Geospatial",
+      "operation": "TOTAL",
+      "ms": 194.2,
+      "detail": ""
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4a. Load text data (DataFrame)",
+      "ms": 3.16,
+      "detail": "200,000 documents"
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4b. Lowercase (DataFrame)",
+      "ms": 9.92,
+      "detail": ""
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4c. TF-IDF vectorize (DataFrame \u2014 no conversion)",
+      "ms": 237.97,
+      "detail": "columns: 72"
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4d. Train/test split (DataFrame)",
+      "ms": 22.35,
+      "detail": ""
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4e. DataFrame \u2192 Tensor (internal)",
+      "ms": 30.23,
+      "detail": ""
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4f. Train LogisticRegression",
+      "ms": 20.57,
+      "detail": ""
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4g. Predict \u002B evaluate",
+      "ms": 4.74,
+      "detail": "acc=0.4995"
+    },
+    {
+      "workflow": "NLP",
+      "operation": "4h. Build results DataFrame (no conversion)",
+      "ms": 0.05,
+      "detail": "result: (40000, 2)"
+    },
+    {
+      "workflow": "NLP",
+      "operation": "TOTAL",
+      "ms": 328.99,
+      "detail": ""
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "5a. Feature engineering (DataFrame)",
+      "ms": 169.08,
+      "detail": "499,991 rows, 7 features"
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "5b. Scale \u002B split (DataFrame)",
+      "ms": 61.02,
+      "detail": ""
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "5c. DataFrame \u2192 Tensor (internal)",
+      "ms": 5.17,
+      "detail": ""
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "5d. Train 5 models \u002B evaluate",
+      "ms": 19084.94,
+      "detail": "5 models trained"
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "5e. Build results DataFrame (no conversion)",
+      "ms": 1.49,
+      "detail": "best model: DecisionTree"
+    },
+    {
+      "workflow": "MultiModel",
+      "operation": "TOTAL",
+      "ms": 19321.7,
+      "detail": ""
+    }
+  ],
+  "summary": {
+    "total_ms": 23373.74,
+    "conversion_ms": 0,
+    "conversion_pct": 0,
+    "num_conversions": 0
+  }
+}

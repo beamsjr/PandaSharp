@@ -31,8 +31,11 @@ public static class ConcatExtensions
             }
         }
 
-        int totalRows = 0;
-        foreach (var f in frames) totalRows += f.RowCount;
+        long totalRowsLong = 0;
+        foreach (var f in frames) totalRowsLong += f.RowCount;
+        if (totalRowsLong > int.MaxValue)
+            throw new OverflowException($"Combined row count ({totalRowsLong}) exceeds int.MaxValue. Cannot concatenate this many rows.");
+        int totalRows = (int)totalRowsLong;
         var columns = new List<IColumn>();
 
         // Pre-build column name sets for O(1) lookup
@@ -80,7 +83,7 @@ public static class ConcatExtensions
         {
             if (df.RowCount != rowCount)
                 throw new ArgumentException(
-                    $"All DataFrames must have the same number of rows for column-wise concat. Expected {rowCount}, got {df.RowCount}.");
+                    $"Cannot concat along columns (axis=1): DataFrame at index {Array.IndexOf(frames, df)} has {df.RowCount} rows but first DataFrame has {rowCount} rows. All DataFrames must have the same row count for column-wise concatenation.");
         }
 
         var columns = new List<IColumn>();

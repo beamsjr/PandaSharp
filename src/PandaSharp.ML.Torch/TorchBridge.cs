@@ -14,11 +14,13 @@ public static class TorchBridge
 {
     /// <summary>
     /// Convert selected DataFrame columns to a TorchSharp float tensor.
+    /// Numeric column values are read via typed fast paths (Column&lt;double&gt;, Column&lt;float&gt;,
+    /// Column&lt;int&gt;) to avoid boxing overhead from GetObject().
     /// </summary>
     public static Tensor ToTorchTensor(this DataFrame df, params string[] columns)
     {
         var cols = columns.Length > 0 ? columns
-            : df.ColumnNames.Where(n => IsNumeric(df[n].DataType)).ToArray();
+            : df.ColumnNames.Where(n => TypeHelpers.IsNumeric(df[n].DataType)).ToArray();
 
         int rows = df.RowCount;
         int ncols = cols.Length;
@@ -28,7 +30,7 @@ public static class TorchBridge
         {
             var col = df[cols[c]];
             for (int r = 0; r < rows; r++)
-                data[r * ncols + c] = col.IsNull(r) ? 0f : Convert.ToSingle(col.GetObject(r));
+                data[r * ncols + c] = col.IsNull(r) ? 0f : (float)TypeHelpers.GetDouble(col, r);
         }
 
         return torch.tensor(data, [rows, ncols]);
@@ -36,13 +38,14 @@ public static class TorchBridge
 
     /// <summary>
     /// Convert a single DataFrame column to a 1D TorchSharp float tensor.
+    /// Uses typed fast paths to avoid boxing. Null values are replaced with 0.
     /// </summary>
     public static Tensor ToTorchTensor1D(this DataFrame df, string column)
     {
         var col = df[column];
         var data = new float[df.RowCount];
         for (int i = 0; i < df.RowCount; i++)
-            data[i] = col.IsNull(i) ? 0f : Convert.ToSingle(col.GetObject(i));
+            data[i] = col.IsNull(i) ? 0f : (float)TypeHelpers.GetDouble(col, i);
         return torch.tensor(data);
     }
 
@@ -57,6 +60,9 @@ public static class TorchBridge
 
     /// <summary>
     /// Convert a PandaSharp double Tensor to a TorchSharp float tensor.
+    /// Note: This involves precision loss from double (64-bit) to float (32-bit).
+    /// Values outside the float range will be clamped to float.MaxValue/MinValue,
+    /// and precision beyond ~7 significant digits will be lost.
     /// </summary>
     public static Tensor ToTorchTensor(this Tensor<double> tensor)
     {
@@ -110,6 +116,4 @@ public static class TorchBridge
         }
     }
 
-    private static bool IsNumeric(Type t) =>
-        t == typeof(int) || t == typeof(long) || t == typeof(double) || t == typeof(float);
 }

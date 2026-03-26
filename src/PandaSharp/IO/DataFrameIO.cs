@@ -56,6 +56,16 @@ public static class DataFrameIO
     public static DataFrame ReadHtmlFile(string path, int tableIndex = 0)
         => HtmlTableReader.ReadHtmlFile(path, tableIndex);
 
+    // -- Avro --
+    public static DataFrame ReadAvro(string path) => AvroReader.Read(path);
+    public static DataFrame ReadAvro(Stream stream) => AvroReader.Read(stream);
+    public static void ToAvro(this DataFrame df, string path) => AvroWriter.Write(df, path);
+    public static void ToAvro(this DataFrame df, Stream stream) => AvroWriter.Write(df, stream);
+
+    // -- ORC --
+    public static DataFrame ReadOrc(string path) => OrcReader.Read(path);
+    public static void ToOrc(this DataFrame df, string path) => OrcWriter.Write(df, path);
+
     // -- Clipboard --
     public static DataFrame FromClipboard(CsvReadOptions? options = null)
         => ClipboardIO.FromClipboard(options);
@@ -92,9 +102,15 @@ public static class DataFrameIO
             case ".xlsx":
                 ExcelIO.WriteExcel(df, path);
                 break;
+            case ".avro":
+                AvroWriter.Write(df, path);
+                break;
+            case ".orc":
+                OrcWriter.Write(df, path);
+                break;
             default:
                 throw new NotSupportedException(
-                    $"Unknown file format '{ext}'. Supported: .csv, .csv.gz, .tsv, .json, .jsonl, .parquet, .arrow, .xlsx");
+                    $"Unknown file format '{ext}'. Supported: .csv, .csv.gz, .tsv, .json, .jsonl, .parquet, .arrow, .xlsx, .avro, .orc");
         }
     }
 
@@ -116,8 +132,10 @@ public static class DataFrameIO
             ".parquet" => ParquetIO.ReadParquet(path),
             ".arrow" or ".ipc" => ArrowIpcReader.Read(path),
             ".xlsx" => ExcelIO.ReadExcel(path),
+            ".avro" => AvroReader.Read(path),
+            ".orc" => OrcReader.Read(path),
             _ => throw new NotSupportedException(
-                $"Unknown file format '{ext}'. Supported: .csv, .csv.gz, .tsv, .json, .jsonl, .parquet, .arrow, .xlsx")
+                $"Unknown file format '{ext}'. Supported: .csv, .csv.gz, .tsv, .json, .jsonl, .parquet, .arrow, .xlsx, .avro, .orc")
         };
     }
 

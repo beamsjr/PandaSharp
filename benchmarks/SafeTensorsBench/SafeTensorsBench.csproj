@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PandaSharp.ML\PandaSharp.ML.csproj" />
+    <ProjectReference Include="..\..\src\PandaSharp.SafeTensors\PandaSharp.SafeTensors.csproj" />
+  </ItemGroup>
+</Project>

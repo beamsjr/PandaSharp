@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using PandaSharp.Column;
 
@@ -352,5 +353,81 @@ public class StringAccessor
         for (int i = 0; i < Length; i++)
             result[i] = _column[i]?.PadLeft(width, fillChar);
         return new StringColumn(Name, result);
+    }
+
+    // -- Case-insensitive operations --
+
+    /// <summary>
+    /// Case-insensitive contains check using OrdinalIgnoreCase.
+    /// </summary>
+    public Column<bool> ContainsIgnoreCase(string substring)
+    {
+        var result = new bool?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = Values[i]?.Contains(substring, StringComparison.OrdinalIgnoreCase);
+        return Column<bool>.FromNullable(Name, result);
+    }
+
+    /// <summary>
+    /// Case-insensitive starts-with check using OrdinalIgnoreCase.
+    /// </summary>
+    public Column<bool> StartsWithIgnoreCase(string prefix)
+    {
+        var result = new bool?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = Values[i]?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        return Column<bool>.FromNullable(Name, result);
+    }
+
+    /// <summary>
+    /// Case-insensitive ends-with check using OrdinalIgnoreCase.
+    /// </summary>
+    public Column<bool> EndsWithIgnoreCase(string suffix)
+    {
+        var result = new bool?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = Values[i]?.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+        return Column<bool>.FromNullable(Name, result);
+    }
+
+    /// <summary>
+    /// Case-insensitive string replacement using OrdinalIgnoreCase.
+    /// </summary>
+    public StringColumn ReplaceIgnoreCase(string oldValue, string newValue)
+    {
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = Values[i]?.Replace(oldValue, newValue, StringComparison.OrdinalIgnoreCase);
+        return new StringColumn(Name, result);
+    }
+
+    // -- Unicode normalization --
+
+    /// <summary>
+    /// Normalize Unicode strings. Skips ASCII-only strings as they are already normalized.
+    /// </summary>
+    public StringColumn NormalizeUnicode(NormalizationForm form = NormalizationForm.FormC)
+    {
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+        {
+            var s = Values[i];
+            if (s is null) { result[i] = null; continue; }
+            // ASCII-only strings are already in any normalization form
+            if (IsAscii(s))
+            {
+                result[i] = s;
+                continue;
+            }
+            result[i] = s.IsNormalized(form) ? s : s.Normalize(form);
+        }
+        return new StringColumn(Name, result);
+    }
+
+    private static bool IsAscii(string s)
+    {
+        for (int i = 0; i < s.Length; i++)
+            if (s[i] > 127) return false;
+        return true;
     }
 }

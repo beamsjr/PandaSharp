@@ -76,7 +76,8 @@ public static class JoinExtensions
             for (int i = 0; i < outputRows; i++)
             {
                 int k = factKeys[i];
-                result[i] = (uint)k <= (uint)maxKey ? srcArr[lookup[k]] : 0;
+                int dimRow = (uint)k <= (uint)maxKey ? lookup[k] : -1;
+                result[i] = dimRow >= 0 ? srcArr[dimRow] : 0;
             }
             return Column<double>.WrapResult(source.Name, bytes, outputRows);
         }
@@ -88,7 +89,8 @@ public static class JoinExtensions
             for (int i = 0; i < outputRows; i++)
             {
                 int k = factKeys[i];
-                result[i] = (uint)k <= (uint)maxKey ? srcArr[lookup[k]] : 0;
+                int dimRow = (uint)k <= (uint)maxKey ? lookup[k] : -1;
+                result[i] = dimRow >= 0 ? srcArr[dimRow] : 0;
             }
             return Column<int>.WrapResult(source.Name, bytes, outputRows);
         }
@@ -167,7 +169,22 @@ public static class JoinExtensions
         JoinType how = JoinType.Inner, string leftSuffix = "_x", string rightSuffix = "_y")
     {
         if (leftOn.Length != rightOn.Length)
-            throw new ArgumentException("leftOn and rightOn must have the same number of columns.");
+            throw new ArgumentException(
+                $"leftOn has {leftOn.Length} column(s) [{string.Join(", ", leftOn.Select(c => $"'{c}'"))}] but rightOn has {rightOn.Length} column(s) [{string.Join(", ", rightOn.Select(c => $"'{c}'"))}]. They must have the same number of columns.");
+
+        // Validate that join key columns exist
+        foreach (var col in leftOn)
+        {
+            if (!left.ColumnNames.Contains(col))
+                throw new ArgumentException(
+                    $"Cannot join: column '{col}' not found in left DataFrame. Available columns: [{string.Join(", ", left.ColumnNames.Select(c => $"'{c}'"))}]");
+        }
+        foreach (var col in rightOn)
+        {
+            if (!right.ColumnNames.Contains(col))
+                throw new ArgumentException(
+                    $"Cannot join: column '{col}' not found in right DataFrame. Available columns: [{string.Join(", ", right.ColumnNames.Select(c => $"'{c}'"))}]");
+        }
 
         if (how == JoinType.Cross)
             return CrossJoin(left, right, leftSuffix, rightSuffix);

@@ -23,6 +23,18 @@ public class GeoPolygon
     {
         if (vertices.Length < 3)
             throw new ArgumentException("A polygon must have at least 3 vertices.");
+
+        // Check for antimeridian crossing: polygon spanning >180 degrees longitude
+        // is not supported by the simple ray-casting algorithm
+        double minLon = double.MaxValue, maxLon = double.MinValue;
+        foreach (var v in vertices)
+        {
+            if (v.Longitude < minLon) minLon = v.Longitude;
+            if (v.Longitude > maxLon) maxLon = v.Longitude;
+        }
+        if (maxLon - minLon > 180)
+            throw new ArgumentException("Polygon spans more than 180° longitude. Antimeridian-crossing polygons are not supported.");
+
         _vertices = vertices;
         _bounds = ComputeBounds(vertices);
     }

@@ -132,7 +132,7 @@ public static class JsonReader
         {
             var values = new int?[rows];
             for (int r = 0; r < rows; r++)
-                values[r] = rawData[r][colIndex] is { } s ? int.Parse(s) : null;
+                values[r] = rawData[r][colIndex] is { } s ? int.Parse(s, System.Globalization.CultureInfo.InvariantCulture) : null;
             return Column<int>.FromNullable(name, values);
         }
         if (type == typeof(double))

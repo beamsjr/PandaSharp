@@ -11,12 +11,15 @@ public class GroupedDataFrame
     private readonly DataFrame _source;
     private readonly string[] _keyColumns;
     private readonly Dictionary<GroupKey, List<int>> _groups;
+    private readonly NullGroupingMode _nullMode;
     private List<int>[]? _cachedGroupEntries;
 
-    internal GroupedDataFrame(DataFrame source, string[] keyColumns)
+    internal GroupedDataFrame(DataFrame source, string[] keyColumns,
+        NullGroupingMode nullMode = NullGroupingMode.Include)
     {
         _source = source;
         _keyColumns = keyColumns;
+        _nullMode = nullMode;
         _groups = BuildGroups();
     }
 
@@ -73,6 +76,8 @@ public class GroupedDataFrame
     public double[] GetGroupDoubles(GroupKey key, string columnName)
     {
         var indices = GetGroupIndices(key);
+        if (!_source.ColumnNames.Contains(columnName))
+            throw new ArgumentException($"Column '{columnName}' does not exist in the DataFrame. Available columns: {string.Join(", ", _source.ColumnNames)}", nameof(columnName));
         var col = _source[columnName];
 
         if (col is Column.Column<double> dc)
@@ -82,6 +87,33 @@ public class GroupedDataFrame
             for (int i = 0; i < indices.Count; i++)
                 result[i] = span[indices[i]];
             return result;
+        }
+
+        if (col is Column.Column<int> ic)
+        {
+            var ispan = ic.Buffer.Span;
+            var iresult = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                iresult[i] = ispan[indices[i]];
+            return iresult;
+        }
+
+        if (col is Column.Column<float> fc)
+        {
+            var fspan = fc.Buffer.Span;
+            var fresult = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                fresult[i] = fspan[indices[i]];
+            return fresult;
+        }
+
+        if (col is Column.Column<long> lc)
+        {
+            var lspan = lc.Buffer.Span;
+            var lresult = new double[indices.Count];
+            for (int i = 0; i < indices.Count; i++)
+                lresult[i] = lspan[indices[i]];
+            return lresult;
         }
 
         // Fallback with conversion
@@ -261,6 +293,135 @@ public class GroupedDataFrame
     }
 
     /// <summary>
+    /// Shift values within each group by the specified number of periods.
+    /// Boundary positions are filled with NaN.
+    /// </summary>
+    public Column.Column<double> Shift(string column, int periods = 1)
+    {
+        int n = _source.RowCount;
+        var result = new double[n];
+        Array.Fill(result, double.NaN);
+
+        foreach (var (key, indices) in _groups)
+        {
+            int groupSize = indices.Count;
+            if (groupSize == 0) continue;
+
+            // Gather source values for this group
+            var groupVals = GetGroupDoubles(key, column);
+
+            if (periods >= 0)
+            {
+                // Shift forward: copy [0..groupSize-periods) to positions [periods..groupSize)
+                int copyCount = groupSize - Math.Min(periods, groupSize);
+                for (int i = 0; i < copyCount; i++)
+                    result[indices[i + periods]] = groupVals[i];
+            }
+            else
+            {
+                // Shift backward: copy [-periods..groupSize) to positions [0..groupSize+periods)
+                int absPeriods = -periods;
+                int copyCount = groupSize - Math.Min(absPeriods, groupSize);
+                for (int i = 0; i < copyCount; i++)
+                    result[indices[i]] = groupVals[i + absPeriods];
+            }
+        }
+
+        return new Column.Column<double>(column, result);
+    }
+
+    /// <summary>
+    /// Compute percentage change within each group. Fused shift+division in a single pass.
+    /// Uses SIMD Vector&lt;double&gt; for the division loop when possible.
+    /// </summary>
+    public Column.Column<double> PctChange(string column, int periods = 1)
+    {
+        int n = _source.RowCount;
+        var result = new double[n];
+        Array.Fill(result, double.NaN);
+
+        foreach (var (key, indices) in _groups)
+        {
+            int groupSize = indices.Count;
+            if (groupSize == 0) continue;
+
+            var groupVals = GetGroupDoubles(key, column);
+
+            int absPeriods = Math.Abs(periods);
+            if (absPeriods >= groupSize) continue; // all NaN
+
+            if (periods >= 0)
+            {
+                // Fused: pct_change[i] = (current[i] - prev[i-periods]) / prev[i-periods]
+                int count = groupSize - absPeriods;
+
+                // SIMD path for the division
+                int vecSize = Vector<double>.Count;
+                int simdEnd = count - (count % vecSize);
+
+                // Build current and previous arrays for SIMD
+                var current = new double[count];
+                var previous = new double[count];
+                for (int i = 0; i < count; i++)
+                {
+                    current[i] = groupVals[i + absPeriods];
+                    previous[i] = groupVals[i];
+                }
+
+                int j = 0;
+                for (; j < simdEnd; j += vecSize)
+                {
+                    var curVec = new Vector<double>(current, j);
+                    var prevVec = new Vector<double>(previous, j);
+                    var diff = (curVec - prevVec) / prevVec;
+                    diff.CopyTo(current, j); // reuse current array for output
+                }
+                for (; j < count; j++)
+                {
+                    current[j] = (current[j] - previous[j]) / previous[j];
+                }
+
+                // Scatter results back
+                for (int i = 0; i < count; i++)
+                    result[indices[i + absPeriods]] = current[i];
+            }
+            else
+            {
+                // Negative periods: compare current to future values
+                int count = groupSize - absPeriods;
+
+                var current = new double[count];
+                var future = new double[count];
+                for (int i = 0; i < count; i++)
+                {
+                    current[i] = groupVals[i];
+                    future[i] = groupVals[i + absPeriods];
+                }
+
+                int vecSize = Vector<double>.Count;
+                int simdEnd = count - (count % vecSize);
+                int j = 0;
+                for (; j < simdEnd; j += vecSize)
+                {
+                    var curVec = new Vector<double>(current, j);
+                    var futVec = new Vector<double>(future, j);
+                    var diff = (curVec - futVec) / futVec;
+                    diff.CopyTo(current, j);
+                }
+                for (; j < count; j++)
+                {
+                    current[j] = (current[j] - future[j]) / future[j];
+                }
+
+                for (int i = 0; i < count; i++)
+                    result[indices[i]] = current[i];
+            }
+        }
+
+        return new Column.Column<double>(column, result);
+    }
+
+    /// <summary>
     /// Named aggregation: apply different functions to different columns.
     /// </summary>
     public DataFrame Agg(Action<AggregationBuilder> configure)
@@ -268,6 +429,27 @@ public class GroupedDataFrame
         var builder = new AggregationBuilder();
         configure(builder);
         return ExecuteNamedAgg(builder.Build());
+    }
+
+    /// <summary>
+    /// Multi-column aggregation with tuple syntax.
+    /// Usage: grouped.Agg(("Salary", AggFunc.Sum), ("Age", AggFunc.Mean), ("Name", AggFunc.Count))
+    /// </summary>
+    public DataFrame Agg(params (string Column, AggFunc Func)[] aggregations)
+    {
+        if (aggregations.Length == 0)
+            throw new ArgumentException("At least one aggregation is required.");
+
+        var specs = new List<(string SourceColumn, string OutputName, AggFunc Func)>();
+        foreach (var (column, func) in aggregations)
+        {
+            if (!_source.ColumnNames.Contains(column))
+                throw new ArgumentException(
+                    $"Column '{column}' not found in DataFrame. Available columns: [{string.Join(", ", _source.ColumnNames.Select(c => $"'{c}'"))}]");
+            string outputName = $"{column}_{func.ToString().ToLower()}";
+            specs.Add((column, outputName, func));
+        }
+        return ExecuteNamedAgg(specs);
     }
 
     /// <summary>
@@ -455,8 +637,16 @@ public class GroupedDataFrame
 
         for (int r = 0; r < _source.RowCount; r++)
         {
+            bool hasNull = false;
             for (int k = 0; k < keyCols.Length; k++)
+            {
                 keyBuffer[k] = keyCols[k].GetObject(r);
+                if (keyBuffer[k] is null) hasNull = true;
+            }
+
+            // Skip rows with null keys when Exclude mode is active
+            if (hasNull && _nullMode == NullGroupingMode.Exclude)
+                continue;
 
             var probeKey = new GroupKey(keyBuffer);
             if (groups.TryGetValue(probeKey, out var list))
@@ -500,6 +690,8 @@ public class GroupedDataFrame
 
         for (int r = 0; r < _source.RowCount; r++)
         {
+            if (vals[r] is null && _nullMode == NullGroupingMode.Exclude)
+                continue;
             var key = vals[r] ?? "";
             if (!stringMap.TryGetValue(key, out var list))
             {
@@ -553,6 +745,8 @@ public class GroupedDataFrame
 
         for (int r = 0; r < _source.RowCount; r++)
         {
+            if (_nullMode == NullGroupingMode.Exclude && col.Nulls.IsNull(r))
+                continue;
             var key = span[r];
             if (!intMap.TryGetValue(key, out var list))
             {
@@ -791,10 +985,40 @@ public class GroupedDataFrame
     private static object? ComputeNumericAggregate(IColumn col, List<int> indices, AggFunc func)
     {
         var values = new List<double>();
-        foreach (var i in indices)
+        if (col is Column.Column<int> intCol)
         {
-            if (col.IsNull(i)) continue;
-            values.Add(Convert.ToDouble(col.GetObject(i)));
+            var span = intCol.Buffer.Span;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                if (!col.IsNull(indices[i]))
+                    values.Add((double)span[indices[i]]);
+            }
+        }
+        else if (col is Column.Column<float> floatCol)
+        {
+            var span = floatCol.Buffer.Span;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                if (!col.IsNull(indices[i]))
+                    values.Add((double)span[indices[i]]);
+            }
+        }
+        else if (col is Column.Column<long> longCol)
+        {
+            var span = longCol.Buffer.Span;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                if (!col.IsNull(indices[i]))
+                    values.Add((double)span[indices[i]]);
+            }
+        }
+        else
+        {
+            foreach (var i in indices)
+            {
+                if (col.IsNull(i)) continue;
+                values.Add(Convert.ToDouble(col.GetObject(i)));
+            }
         }
 
         if (values.Count == 0) return null;

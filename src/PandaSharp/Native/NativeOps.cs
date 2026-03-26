@@ -431,11 +431,37 @@ public static class NativeOps
     private const int CblasUpper = 121;
     private const int CblasTrans = 112;
 
+    private static bool _accelerateChecked;
+    private static bool _accelerateAvailable;
+
     /// <summary>Gram matrix C = X^T * X using Apple Accelerate BLAS when available.</summary>
     public static void GramMatrixUpper(double[] X, int n, int k, double[] C)
     {
-        // Try Apple Accelerate BLAS dsyrk — massively faster for large matrices
-        try
+        // Use cached Accelerate availability to avoid repeated try/catch
+        if (!_accelerateChecked)
+        {
+            try
+            {
+                Array.Clear(C);
+                unsafe
+                {
+                    fixed (double* pX = X, pC = C)
+                    {
+                        cblas_dsyrk(CblasRowMajor, CblasUpper, CblasTrans,
+                            k, n, 1.0, (IntPtr)pX, k, 0.0, (IntPtr)pC, k);
+                    }
+                }
+                _accelerateAvailable = true;
+                _accelerateChecked = true;
+                return;
+            }
+            catch (DllNotFoundException)
+            {
+                _accelerateAvailable = false;
+                _accelerateChecked = true;
+            }
+        }
+        else if (_accelerateAvailable)
         {
             Array.Clear(C);
             unsafe
@@ -448,7 +474,6 @@ public static class NativeOps
             }
             return;
         }
-        catch { /* Accelerate not available */ }
 
         if (_available)
         {

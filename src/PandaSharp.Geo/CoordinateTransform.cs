@@ -22,6 +22,8 @@ public static class CoordinateTransform
     /// </summary>
     public static GeoColumn Reproject(this GeoColumn geo, CoordinateSystem source, CoordinateSystem target)
     {
+        // Validate bounds only when source is a geographic CRS (lat/lon in degrees)
+        bool isGeographic = source is GeographicCoordinateSystem;
         var transform = _factory.CreateFromCoordinateSystems(source, target);
         var mt = transform.MathTransform;
 
@@ -31,6 +33,13 @@ public static class CoordinateTransform
         for (int i = 0; i < geo.Length; i++)
         {
             var point = geo[i];
+            if (isGeographic)
+            {
+                if (point.Latitude < -90 || point.Latitude > 90)
+                    throw new ArgumentOutOfRangeException($"Latitude at index {i} is {point.Latitude}, must be between -90 and 90.");
+                if (point.Longitude < -180 || point.Longitude > 180)
+                    throw new ArgumentOutOfRangeException($"Longitude at index {i} is {point.Longitude}, must be between -180 and 180.");
+            }
             // ProjNet uses (x=lon, y=lat) order for geographic CRS
             var projected = mt.Transform(new[] { point.Longitude, point.Latitude });
             lons[i] = projected[0];

@@ -27,9 +27,13 @@ public class StringColumn : IColumn
     /// </summary>
     public (int[] Codes, string[] Uniques) GetDictCodes()
     {
-        var dict = _cachedDict ?? DictEncoding.Encode(this);
-        _cachedDict = dict;
-        return (dict.Codes, dict.Uniques);
+        var cached = _cachedDict;
+        if (cached is not null)
+            return (cached.Codes, cached.Uniques);
+        var dict = DictEncoding.Encode(this);
+        // Benign race: if another thread computed simultaneously, use whichever wins
+        var winner = Interlocked.CompareExchange(ref _cachedDict, dict, null) ?? dict;
+        return (winner.Codes, winner.Uniques);
     }
 
     public string Name { get; }
@@ -136,6 +140,52 @@ public class StringColumn : IColumn
         for (int i = 0; i < Length; i++)
             result[i] = _values[i] == value;
         return result;
+    }
+
+    /// <summary>Convert all string values to uppercase.</summary>
+    public StringColumn ToUpper()
+    {
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = _values[i]?.ToUpperInvariant();
+        return CreateOwned(Name, result);
+    }
+
+    /// <summary>Convert all string values to lowercase.</summary>
+    public StringColumn ToLower()
+    {
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = _values[i]?.ToLowerInvariant();
+        return CreateOwned(Name, result);
+    }
+
+    /// <summary>Trim whitespace from both ends of all string values.</summary>
+    public StringColumn Trim()
+    {
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+            result[i] = _values[i]?.Trim();
+        return CreateOwned(Name, result);
+    }
+
+    /// <summary>Extract a substring from each string value.</summary>
+    public StringColumn Substring(int startIndex, int length)
+    {
+        if (startIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(startIndex), "startIndex must be non-negative.");
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(length), "length must be non-negative.");
+        var result = new string?[Length];
+        for (int i = 0; i < Length; i++)
+        {
+            var s = _values[i];
+            if (s is null) { result[i] = null; continue; }
+            if (startIndex >= s.Length) { result[i] = ""; continue; }
+            int actualLen = Math.Min(length, s.Length - startIndex);
+            result[i] = s.Substring(startIndex, actualLen);
+        }
+        return CreateOwned(Name, result);
     }
 
     internal string?[] GetValues() => _values;

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>PandaSharp.Text</RootNamespace>
+    <PackageId>PandaSharp.Text</PackageId>
+    <Description>NLP pipeline for PandaSharp: tokenizers, text preprocessing, embeddings, text analytics</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
+  </ItemGroup>
+</Project>

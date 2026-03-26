@@ -816,6 +816,7 @@ public static class ColumnExtensions
         if (col.NullCount == 0)
         {
             int n = col.Length;
+            if (n == 0) return Column<T>.WrapResult(col.Name, Array.Empty<byte>(), 0);
             var bytes = new byte[n * Unsafe.SizeOf<T>()];
             var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
             var span = col.Buffer.Span;
@@ -842,6 +843,7 @@ public static class ColumnExtensions
         if (col.NullCount == 0)
         {
             int n = col.Length;
+            if (n == 0) return Column<T>.WrapResult(col.Name, Array.Empty<byte>(), 0);
             var bytes = new byte[n * Unsafe.SizeOf<T>()];
             var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
             var span = col.Buffer.Span;

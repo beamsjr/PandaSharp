@@ -161,4 +161,95 @@ public static class ColumnArithmetic
 
     public static StringColumn Rename(this StringColumn col, string newName) =>
         (StringColumn)col.Clone(newName);
+
+    // -- Type widening --
+
+    /// <summary>
+    /// Convert a numeric column to Column&lt;double&gt;.
+    /// Supports int, long, float, double, byte, short, decimal.
+    /// </summary>
+    public static Column<double> AsDouble<T>(this Column<T> col) where T : struct, INumber<T>
+    {
+        var span = col.Buffer.Span;
+        var result = new double[col.Length];
+        for (int i = 0; i < span.Length; i++)
+            result[i] = double.CreateChecked(span[i]);
+        return new Column<double>(col.Name, result);
+    }
+
+    // -- Mixed-type arithmetic (int + double, float + double, etc.) --
+
+    public static Column<double> Add(this Column<int> left, Column<double> right)
+        => left.AsDouble().Add(right);
+
+    public static Column<double> Add(this Column<double> left, Column<int> right)
+        => left.Add(right.AsDouble());
+
+    public static Column<double> Subtract(this Column<int> left, Column<double> right)
+        => left.AsDouble().Subtract(right);
+
+    public static Column<double> Subtract(this Column<double> left, Column<int> right)
+        => left.Subtract(right.AsDouble());
+
+    public static Column<double> Multiply(this Column<int> left, Column<double> right)
+        => left.AsDouble().Multiply(right);
+
+    public static Column<double> Multiply(this Column<double> left, Column<int> right)
+        => left.Multiply(right.AsDouble());
+
+    public static Column<double> Divide(this Column<int> left, Column<double> right)
+        => left.AsDouble().Divide(right);
+
+    public static Column<double> Divide(this Column<double> left, Column<int> right)
+        => left.Divide(right.AsDouble());
+
+    // float + double
+    public static Column<double> Add(this Column<float> left, Column<double> right)
+        => left.AsDouble().Add(right);
+
+    public static Column<double> Add(this Column<double> left, Column<float> right)
+        => left.Add(right.AsDouble());
+
+    public static Column<double> Subtract(this Column<float> left, Column<double> right)
+        => left.AsDouble().Subtract(right);
+
+    public static Column<double> Subtract(this Column<double> left, Column<float> right)
+        => left.Subtract(right.AsDouble());
+
+    public static Column<double> Multiply(this Column<float> left, Column<double> right)
+        => left.AsDouble().Multiply(right);
+
+    public static Column<double> Multiply(this Column<double> left, Column<float> right)
+        => left.Multiply(right.AsDouble());
+
+    public static Column<double> Divide(this Column<float> left, Column<double> right)
+        => left.AsDouble().Divide(right);
+
+    public static Column<double> Divide(this Column<double> left, Column<float> right)
+        => left.Divide(right.AsDouble());
+
+    // long + double
+    public static Column<double> Add(this Column<long> left, Column<double> right)
+        => left.AsDouble().Add(right);
+
+    public static Column<double> Add(this Column<double> left, Column<long> right)
+        => left.Add(right.AsDouble());
+
+    public static Column<double> Subtract(this Column<long> left, Column<double> right)
+        => left.AsDouble().Subtract(right);
+
+    public static Column<double> Subtract(this Column<double> left, Column<long> right)
+        => left.Subtract(right.AsDouble());
+
+    public static Column<double> Multiply(this Column<long> left, Column<double> right)
+        => left.AsDouble().Multiply(right);
+
+    public static Column<double> Multiply(this Column<double> left, Column<long> right)
+        => left.Multiply(right.AsDouble());
+
+    public static Column<double> Divide(this Column<long> left, Column<double> right)
+        => left.AsDouble().Divide(right);
+
+    public static Column<double> Divide(this Column<double> left, Column<long> right)
+        => left.Divide(right.AsDouble());
 }

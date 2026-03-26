@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="PandaSharp.Tests.Unit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
   </ItemGroup>
 

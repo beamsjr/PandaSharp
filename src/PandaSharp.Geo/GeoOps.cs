@@ -41,15 +41,16 @@ public static class GeoOps
 
     /// <summary>
     /// Convert a distance in kilometers to approximate degrees at a given latitude.
+    /// Returns both latitude and longitude degree values since they differ at non-equatorial latitudes.
     /// Useful for creating bounding boxes from kilometer distances.
     /// </summary>
-    public static double KmToDegrees(double km, double atLatitude = 0)
+    public static (double LatDeg, double LonDeg) KmToDegrees(double km, double atLatitude = 0)
     {
         // 1 degree of latitude ≈ 111.32 km
         double latDeg = km / 111.32;
         // Longitude degrees shrink with cos(latitude)
         double lonDeg = km / (111.32 * Math.Cos(atLatitude * DegToRad));
-        return Math.Max(latDeg, lonDeg);
+        return (latDeg, lonDeg);
     }
 
     /// <summary>

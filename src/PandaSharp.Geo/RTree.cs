@@ -45,8 +45,8 @@ public class RTree
     /// <summary>Find all point indices within a given distance (km) of a target.</summary>
     public List<(int Index, double DistanceKm)> QueryRadius(GeoPoint target, double radiusKm)
     {
-        double deg = GeoOps.KmToDegrees(radiusKm, target.Latitude);
-        var bbox = BoundingBox.FromPoint(target, deg);
+        var (latDeg, lonDeg) = GeoOps.KmToDegrees(radiusKm, target.Latitude);
+        var bbox = BoundingBox.FromPoint(target, latDeg, lonDeg);
         var candidates = Query(bbox);
 
         var result = new List<(int, double)>();

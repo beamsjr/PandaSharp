@@ -22,15 +22,35 @@ public class StandardScaler : ITransformer
             var col = df[name];
             double mean = 0, m2 = 0;
             int count = 0;
-            for (int i = 0; i < col.Length; i++)
+
+            // Fast path for Column<double> — avoid per-cell type dispatch
+            if (col is Column<double> dCol)
             {
-                if (col.IsNull(i)) continue;
-                double val = TypeHelpers.GetDouble(col, i);
-                count++;
-                double delta = val - mean;
-                mean += delta / count;
-                m2 += delta * (val - mean);
+                var vals = dCol.Values;
+                bool hasNulls = dCol.NullCount > 0;
+                for (int i = 0; i < vals.Length; i++)
+                {
+                    if (hasNulls && dCol.IsNull(i)) continue;
+                    double val = vals[i];
+                    count++;
+                    double delta = val - mean;
+                    mean += delta / count;
+                    m2 += delta * (val - mean);
+                }
             }
+            else
+            {
+                for (int i = 0; i < col.Length; i++)
+                {
+                    if (col.IsNull(i)) continue;
+                    double val = TypeHelpers.GetDouble(col, i);
+                    count++;
+                    double delta = val - mean;
+                    mean += delta / count;
+                    m2 += delta * (val - mean);
+                }
+            }
+
             double std = count > 1 ? Math.Sqrt(m2 / (count - 1)) : 1.0;
             _params[name] = (mean, std == 0 ? 1.0 : std);
         }
@@ -46,8 +66,30 @@ public class StandardScaler : ITransformer
             if (!df.ColumnNames.Contains(name)) continue;
             var col = df[name];
             var values = new double[df.RowCount];
-            for (int i = 0; i < df.RowCount; i++)
-                values[i] = col.IsNull(i) ? double.NaN : (TypeHelpers.GetDouble(col, i) - mean) / std;
+            double invStd = 1.0 / std;
+
+            // Fast path for Column<double> — avoid per-cell type dispatch
+            if (col is Column<double> dCol)
+            {
+                var src = dCol.Values;
+                bool hasNulls = dCol.NullCount > 0;
+                if (!hasNulls)
+                {
+                    for (int i = 0; i < src.Length; i++)
+                        values[i] = (src[i] - mean) * invStd;
+                }
+                else
+                {
+                    for (int i = 0; i < src.Length; i++)
+                        values[i] = dCol.IsNull(i) ? double.NaN : (src[i] - mean) * invStd;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < df.RowCount; i++)
+                    values[i] = col.IsNull(i) ? double.NaN : (TypeHelpers.GetDouble(col, i) - mean) * invStd;
+            }
+
             result = result.Assign(name, new Column<double>(name, values));
         }
         return result;

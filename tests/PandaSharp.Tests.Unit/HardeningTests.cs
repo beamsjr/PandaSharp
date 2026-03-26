@@ -2,7 +2,7 @@ using System.Text;
 using FluentAssertions;
 using PandaSharp;
 using PandaSharp.Column;
-using PandaSharp.Compare;
+
 using PandaSharp.Concat;
 using PandaSharp.Expressions;
 using PandaSharp.GroupBy;

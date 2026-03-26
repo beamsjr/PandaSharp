@@ -16,6 +16,15 @@ public class DataFrameDataLoader : IEnumerable<(Tensor<double> Features, Tensor<
     private readonly int _batchSize;
     private readonly bool _shuffle;
     private readonly int? _seed;
+
+    /// <summary>
+    /// Tracks the current epoch number. Incremented each time GetEnumerator() is called
+    /// when shuffle is enabled. Used to vary the random seed per epoch (seed + _epochCount)
+    /// so each epoch produces a different shuffle order while remaining deterministic.
+    /// When shuffle is disabled, _epochCount is not incremented and has no effect.
+    /// If shuffle is toggled externally (not supported — shuffle is readonly), the counter
+    /// continues from its current value.
+    /// </summary>
     private int _epochCount;
 
     public int BatchCount => (_df.RowCount + _batchSize - 1) / _batchSize;

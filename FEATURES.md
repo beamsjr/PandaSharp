@@ -301,3 +301,237 @@
 - [x] Hash/range partitioning: df.Partition(n), df.HashPartition(col, n), ParallelGroupBy/Filter/Where/Map, auto-tune to core count
 - [x] Partitioned Parquet (Hive-style): ReadPartitioned, WritePartitioned with multi-level key=value directories
 - [x] Cloud storage adapters: S3Storage, AzureStorage, GcsStorage with auto-format DataFrame read/write (PandaSharp.Cloud)
+
+### PandaSharp.ML.Models — Classical ML Algorithms
+
+#### Linear Models
+
+- [x] LinearRegression (OLS via normal equations, Ridge/L2 penalty option)
+- [x] LogisticRegression (binary + multi-class, gradient descent solver)
+- [x] SGDClassifier (stochastic gradient descent with configurable loss)
+- [x] SGDRegressor (stochastic gradient descent for regression)
+- [x] ElasticNet (combined L1/L2 regularization)
+- [x] Lasso (L1 regularization, coordinate descent solver)
+
+#### Tree-Based Models
+
+- [x] DecisionTreeClassifier (CART algorithm, Gini/entropy split criteria)
+- [x] DecisionTreeRegressor (MSE/MAE split criteria)
+- [x] RandomForestClassifier (bagged decision trees, configurable n_estimators/max_depth)
+- [x] RandomForestRegressor (bagged trees for regression)
+- [x] GradientBoostedTreeClassifier (sequential boosting, learning rate, subsample)
+- [x] GradientBoostedTreeRegressor (sequential boosting for regression)
+
+#### Distance-Based Models
+
+- [x] KNearestNeighborsClassifier (brute-force + KD-tree, configurable k/distance metric)
+- [x] KNearestNeighborsRegressor (weighted average of k nearest)
+
+#### Clustering
+
+- [x] KMeans (Lloyd's algorithm, k-means++ initialization, configurable n_clusters/max_iter)
+- [x] DBSCAN (density-based, configurable eps/min_samples)
+- [x] AgglomerativeClustering (single/complete/average/ward linkage)
+- [x] Silhouette score, Davies-Bouldin index, Calinski-Harabasz index (cluster metrics)
+
+#### Dimensionality Reduction
+
+- [x] PCA (eigendecomposition of covariance matrix, explained variance ratio)
+- [x] TruncatedSVD (for sparse data, no centering required)
+- [x] UMAP (approximate nearest neighbors + graph layout)
+- [x] t-SNE (Barnes-Hut approximation for large datasets)
+
+#### Model Infrastructure
+
+- [x] IModel interface: Fit(X, y), Predict(X), Score(X, y) — unified API for all models
+- [x] Cross-validation: CrossValScore(model, df, features, label, nFolds, scorer)
+- [x] GridSearchCV (exhaustive hyperparameter search, returns best params + scores DataFrame)
+- [x] HyperparameterResult record: BestParams, BestScore, AllResults DataFrame
+- [x] Model serialization: model.Save(path), Model.Load(path) via JSON/binary
+- [x] LearningCurve: train/val score vs training set size (returns DataFrame for plotting)
+- [x] ConfusionMatrixDisplay: confusion matrix → DataFrame for Viz heatmap
+
+### PandaSharp.TimeSeries — Forecasting & Analysis
+
+#### Statistical Models
+
+- [x] ARIMA (p, d, q) with auto-differencing and configurable order
+- [x] SARIMA (seasonal ARIMA with seasonal period P, D, Q, m)
+- [x] AutoARIMA (AIC/BIC-based order selection, stepwise search)
+- [x] ExponentialSmoothing (Simple, Double/Holt, Triple/Holt-Winters, additive/multiplicative)
+- [x] SimpleMovingAverageForecast (baseline forecaster using rolling mean)
+
+#### Decomposition
+
+- [x] SeasonalDecompose (additive/multiplicative, STL decomposition into trend + seasonal + residual)
+- [x] FFT-based periodogram (dominant frequency detection)
+
+#### Stationarity & Diagnostics
+
+- [x] AugmentedDickeyFuller test (unit root test for stationarity)
+- [x] KPSS test (stationarity around deterministic trend)
+- [x] ACF (autocorrelation function, returns DataFrame with lags + values)
+- [x] PACF (partial autocorrelation function)
+- [x] Ljung-Box test (residual autocorrelation significance)
+
+#### Forecasting API
+
+- [x] IForecaster interface: Fit(DataFrame, dateColumn, valueColumn), Forecast(horizon), ForecastWithInterval(horizon, alpha)
+- [x] ForecastResult record: Dates, Values, LowerBound, UpperBound (as DataFrame)
+- [x] Backtesting: expanding/sliding window evaluation, returns metrics per fold DataFrame
+- [x] Multi-step forecast (recursive and direct strategies)
+- [x] Changepoint detection (PELT algorithm or Bayesian online changepoint)
+
+#### Feature Engineering for Time Series
+
+- [x] LagFeatures transformer: auto-generate lag_1, lag_2, ..., lag_n columns
+- [x] DateTimeFeatures transformer: extract day_of_week, month, quarter, is_holiday, etc.
+- [x] RollingFeatures transformer: rolling mean/std/min/max as new columns with configurable windows
+- [x] FourierFeatures transformer: sin/cos components for seasonal modeling
+
+
+### PandaSharp.Text — NLP Pipeline
+
+#### Tokenization
+
+- [x] WhitespaceTokenizer (split on whitespace, configurable lowercasing)
+- [x] RegexTokenizer (configurable pattern, handles punctuation/contractions)
+- [x] BPETokenizer (byte-pair encoding, train from corpus or load pre-trained vocab)
+- [x] WordPieceTokenizer (BERT-style subword tokenization, load from HuggingFace vocab.txt)
+- [x] SentencePieceTokenizer (unigram model, load pre-trained .model files)
+- [x] TokenizerResult: token IDs, attention mask, token-to-word mapping
+
+#### Text Preprocessing
+
+- [x] StopWordRemover (built-in English/Spanish/French/German lists + custom)
+- [x] Stemmer (Porter stemmer, Snowball stemmer)
+- [x] Lemmatizer (dictionary-based English lemmatization)
+- [x] NGramExtractor (unigram, bigram, trigram, configurable n + range)
+- [x] TextCleaner transformer: lowercase, strip HTML, remove URLs/emails/numbers, normalize whitespace
+- [x] SentenceSplitter (rule-based sentence boundary detection)
+
+#### Embeddings
+
+- [x] TextEmbedder (ONNX-based sentence embeddings, wraps OnnxScorer with tokenizer preprocessing)
+- [x] TextEmbedder.MiniLM() preset (all-MiniLM-L6-v2, 384-dim)
+- [x] TextEmbedder.E5() preset (e5-small-v2, 384-dim)
+- [x] CosineSimilarity: pairwise similarity between embedding columns
+- [x] SemanticSearch: query embedding vs corpus embeddings, returns top-k DataFrame with scores
+
+#### Text Analytics
+
+- [x] TextColumn accessor: df["text"].Text.TokenCount(), .WordFrequency(), .SentenceCount()
+- [x] NamedEntityRecognition via ONNX (stub — load NER model, returns DataFrame with entity spans + labels)
+- [x] TextClassifier via ONNX (stub — sentiment, topic, etc. — wraps OnnxScorer with tokenizer)
+- [x] DocumentSimilarityMatrix: TF-IDF or embedding cosine sim → DataFrame/heatmap
+
+
+### PandaSharp.Vision — Image & Video Processing
+
+#### Core
+
+- [x] ImageTensor wrapper (Tensor<float> with [H,W,C] / [N,H,W,C] shape enforcement)
+- [x] ImageIO.Load(path) / Load(paths) / Load(stream) → ImageTensor
+- [x] ImageIO.Save(tensor, path) (PNG/JPEG based on extension)
+- [x] ImageIO.LoadFromColumn(df, pathColumn, resizeWidth, resizeHeight) → ImageTensor batch
+- [x] ChannelOrder enum (RGB, BGR, Grayscale)
+- [x] CorruptImageHandling enum (Skip, ZeroFill, Error)
+
+#### Transforms (IImageTransformer)
+
+- [x] Resize (Bilinear/NearestNeighbor/Bicubic interpolation)
+- [x] CenterCrop (pure tensor slice)
+- [x] RandomCrop (with optional padding, seeded Random)
+- [x] RandomHorizontalFlip (probability p, default 0.5)
+- [x] RandomVerticalFlip (probability p)
+- [x] Normalize (channel-wise mean/std, ImageNet/CIFAR10 presets)
+- [x] ColorJitter (random brightness/contrast/saturation/hue)
+- [x] GaussianBlur (configurable sigma range)
+- [x] RandomRotation (degree range via ImageSharp affine)
+- [x] RandomErasing (cutout with configurable area ratio/aspect ratio)
+- [x] Grayscale (RGB → single-channel, ITU-R BT.601 weights)
+- [x] ToTensorTransform (Image<Rgb24> → ImageTensor, bytes → [0,1] float)
+
+#### Pipeline & Data Loading
+
+- [x] ImagePipeline (composable IImageTransformer chain with builder API)
+- [x] ImageDataLoader (DataFrame path column → augmented ImageTensor batches, shuffle per epoch)
+- [x] ImageColumn (lazy-load image references, LoadAll/LoadAt, base64 thumbnails for display)
+
+#### Pre-trained Models
+
+- [x] ImageEmbedder (ONNX wrapper with preprocessing, ResNet50/MobileNetV3 presets)
+- [x] ImageClassifier (ONNX wrapper, Predict/PredictTopK, returns DataFrame with predictions)
+
+#### Video
+
+- [x] VideoReader (frame extraction to DataFrame [FrameIndex, Timestamp, ImagePath] or ImageTensor)
+- [x] VideoReader.Frames() lazy enumeration
+- [x] VideoFrameDataLoader (DataFrame of video paths → frame clip batches)
+
+#### Utilities
+
+- [x] ImageStats.ComputeNormalization (per-channel mean/std across dataset)
+- [x] ImageStats.DatasetSummary (image count, size distribution, aspect ratios, format breakdown)
+- [x] ImageStats.ValidateImages (find corrupt/unreadable images)
+- [x] ImageViz.ToImageGrid (HTML grid of images from DataFrame)
+- [x] ImageViz.ShowAugmentations (side-by-side augmentation results)
+
+
+### PandaSharp.SafeTensors — HuggingFace Weight Loading
+
+- [x] SafeTensorReader: parse header JSON + memory-map tensor data
+- [x] SafeTensorReader.Open(path) / Open(stream)
+- [x] GetTensorNames() → string[]
+- [x] GetTensor<T>(name) → Tensor<T> (zero-copy via memory-mapped span)
+- [x] GetMetadata() → Dictionary<string, string>
+- [x] SafeTensorWriter: create SafeTensors files from PandaSharp Tensor<T>
+- [x] Support dtypes: float16, float32, float64, int32, int64, bfloat16 (read as float32)
+- [x] TorchSharp integration: LoadSafeTensors(path) → populate TorchSharp module parameters
+
+
+### PandaSharp.ML Review Fixes (from Code Review 2 & 3)
+### Review 2 — Carried Forward
+
+- [x] OnnxScorer: replace Convert.ToSingle(col.GetObject(r)) with TypeHelpers fast path (Predict line 50, PredictBatched line 91)
+- [x] TorchBridge: replace Convert.ToSingle(col.GetObject(r)) with TypeHelpers fast path (ToTorchTensor line 31, ToTorchTensor1D line 45)
+- [x] TorchBridge: deduplicate IsNumeric helper (line 113 duplicates TensorExtensions line 77)
+- [x] PipelineSerialization: implement Deserialize() or update doc comment
+- [x] PipelineSerialization: add TargetEncoder to ExtractParams()
+- [x] PipelineSerialization: add comment for stateless PolynomialFeatures
+- [x] TorchBridge: document precision loss in Tensor<double> → float conversion
+
+#### Review 3 — New Findings
+
+- [x] DataViewBridge: replace GetObject() boxing in int/long getters with typed fast paths
+- [x] Extract shared IsNumeric helper to TypeHelpers (currently copy-pasted in 6 files)
+- [x] OnnxScorer: remove unused _inputWidth field (dead code)
+- [x] MinMaxScaler: handle all-null columns (min > max edge case)
+- [x] LabelEncoder: add UnknownCategoryHandling for consistency with OneHotEncoder
+- [x] DataFrameDataLoader: document _epochCount behavior when shuffle is toggled
+- [x] Tensor.Random: add RandomNormal factory for standard-normal distribution
+- [x] ClassificationMetrics.MultiClass: warn or throw on null values instead of treating as class 0
+
+### Code Review Fixes Applied
+- [x] DropDuplicates composite key collision fix (<<20 → *nUniques2)
+- [x] DropDuplicates 3+ string hash collision resolution (bucket-based equality check)
+- [x] CumMin/CumMax empty column crash fix
+- [x] JoinMany negative key / BuildMappedColumnIndirect OOB fix
+- [x] DescribeDouble null value handling (compact non-null values)
+- [x] Thread safety: Random locks in Vision transforms, Volatile for _cachedDict, Interlocked for _epochCount
+- [x] Error handling: bare catch blocks narrowed to catch (Exception), idempotent Dispose, SafeTensorReader stream dispose
+- [x] Performance: hoisted inner loop allocations (JacobiEigen, t-SNE, SGD), cached BLAS availability
+- [x] Null guards on all public APIs across ML Models, TimeSeries, Text, Vision, SafeTensors (~100 methods)
+- [x] Dimension validation (y.Length == X.Shape[0]) in all ML model Fit methods
+- [x] Negative label guards in DecisionTree/GradientBoosted classifiers
+- [x] Empty input guards in Score methods
+- [x] Triple ES multiplicative division-by-zero epsilon guard
+- [x] PartialSort/ComputeNumericAggregate/GetGroupDoubles boxing elimination (typed fast paths)
+
+### TODO: Test Coverage (from Code Review)
+- [x] Tests for PandaSharp.ML.Models (21 tests — LinearRegression, LogisticRegression, DecisionTree, RandomForest, KNN, KMeans, PCA, ElasticNet, CrossVal, null guards, dimension mismatch)
+- [x] Tests for PandaSharp.TimeSeries (23 tests — SMA, ETS, ARIMA, AutoARIMA, SeasonalDecompose, ACF, ADF/KPSS, Periodogram, Features, Changepoint, Backtesting, null guards)
+- [x] Tests for PandaSharp.Text (27 tests — all tokenizers, preprocessors, CosineSimilarity, SemanticSearch, TextColumnAccessor, null guards)
+- [x] Tests for PandaSharp.SafeTensors (7 tests — round-trip float/double, multiple tensors, metadata, GetTensorNames, null guards)
+- [x] Tests for PandaSharp.Vision (19 tests — ImageTensor, all transforms, pipeline composition, builder API)
+
