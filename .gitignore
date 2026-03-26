@@ -37,14 +37,12 @@ pandasharp_spill_*
 
 ## Benchmark output
 *_bench_output/
-*_output/
 benchmarks/**/*_results.json
 benchmarks/**/*.safetensors
 benchmarks/**/*.parquet
 ml_bench_output/
 
-## Sample/stock output
-stock_output/
+## Python comparison output (not source)
 stock_output_python/
 
 ## Root-level scratch files
