@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using PandaSharp.Column;
 
 namespace PandaSharp.Statistics;
@@ -20,11 +21,11 @@ public static class RankExtensions
         int n = col.Length;
         var result = new double?[n];
 
-        // Build list of (index, value) for non-null entries, then sort
+        // Build list of (index, value) for non-missing entries (null or NaN), then sort
         var entries = new List<(int Index, T Value)>();
         for (int i = 0; i < n; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             entries.Add((i, col.Buffer.Span[i]));
         }
 

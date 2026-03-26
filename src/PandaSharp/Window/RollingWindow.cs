@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using PandaSharp.Column;
 
 namespace PandaSharp.Window;
@@ -21,7 +22,7 @@ public class RollingWindow<T> where T : struct, INumber<T>
     // Typed fast path for Mean — O(n) sliding window with running sum
     public Column<double> Mean()
     {
-        if (_column.NullCount == 0)
+        if (_column.NullCount == 0 && !HasNaNValues())
             return RollingMeanFast();
         return Apply(vals => vals.Count > 0 ? vals.Average() : double.NaN);
     }
@@ -72,6 +73,24 @@ public class RollingWindow<T> where T : struct, INumber<T>
         return sumSq / (vals.Count - 1);
     });
 
+    /// <summary>Check if the column buffer contains any NaN values (for double/float types).</summary>
+    private bool HasNaNValues()
+    {
+        if (typeof(T) == typeof(double))
+        {
+            var span = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(_column.Buffer.Span);
+            for (int i = 0; i < span.Length; i++)
+                if (double.IsNaN(span[i])) return true;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var span = System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(_column.Buffer.Span);
+            for (int i = 0; i < span.Length; i++)
+                if (float.IsNaN(span[i])) return true;
+        }
+        return false;
+    }
+
     /// <summary>O(n) sliding window mean for null-free columns. Supports center alignment.</summary>
     private Column<double> RollingMeanFast()
     {
@@ -116,6 +135,18 @@ public class RollingWindow<T> where T : struct, INumber<T>
         return Column<double>.FromNullable(_column.Name, result);
     }
 
+    /// <summary>Check if value at index is missing (null bitmask OR NaN for floating-point).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsMissing(int index)
+    {
+        if (_column.Nulls.IsNull(index)) return true;
+        if (typeof(T) == typeof(double))
+            return double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        if (typeof(T) == typeof(float))
+            return float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        return false;
+    }
+
     public Column<double> Apply(Func<List<double>, double> func)
     {
         int n = _column.Length;
@@ -144,7 +175,7 @@ public class RollingWindow<T> where T : struct, INumber<T>
             windowValues.Clear();
             for (int j = start; j < end; j++)
             {
-                if (!_column.Nulls.IsNull(j))
+                if (!IsMissing(j))
                     windowValues.Add(double.CreateChecked(_column.Buffer.Span[j]));
             }
 
@@ -166,6 +197,18 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
         _minPeriods = minPeriods;
     }
 
+    /// <summary>Check if value at index is missing (null bitmask OR NaN for floating-point).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsMissing(int index)
+    {
+        if (_column.Nulls.IsNull(index)) return true;
+        if (typeof(T) == typeof(double))
+            return double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        if (typeof(T) == typeof(float))
+            return float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        return false;
+    }
+
     // Typed fast paths — O(n) single pass, no copying
     public Column<double> Mean()
     {
@@ -175,7 +218,7 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
         var span = _column.Buffer.Span;
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i)) { sum += double.CreateChecked(span[i]); count++; }
+            if (!IsMissing(i)) { sum += double.CreateChecked(span[i]); count++; }
             result[i] = count >= _minPeriods ? sum / count : null;
         }
         return Column<double>.FromNullable(_column.Name, result);
@@ -189,7 +232,7 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
         var span = _column.Buffer.Span;
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i)) { sum += double.CreateChecked(span[i]); count++; }
+            if (!IsMissing(i)) { sum += double.CreateChecked(span[i]); count++; }
             result[i] = count >= _minPeriods ? sum : null;
         }
         return Column<double>.FromNullable(_column.Name, result);
@@ -203,7 +246,7 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
         var span = _column.Buffer.Span;
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i)) { double v = double.CreateChecked(span[i]); if (v < min) min = v; count++; }
+            if (!IsMissing(i)) { double v = double.CreateChecked(span[i]); if (v < min) min = v; count++; }
             result[i] = count >= _minPeriods ? min : null;
         }
         return Column<double>.FromNullable(_column.Name, result);
@@ -217,7 +260,7 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
         var span = _column.Buffer.Span;
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i)) { double v = double.CreateChecked(span[i]); if (v > max) max = v; count++; }
+            if (!IsMissing(i)) { double v = double.CreateChecked(span[i]); if (v > max) max = v; count++; }
             result[i] = count >= _minPeriods ? max : null;
         }
         return Column<double>.FromNullable(_column.Name, result);
@@ -225,20 +268,27 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
 
     public Column<double> Std()
     {
+        // Use Welford's online algorithm for numerical stability
         int n = _column.Length;
         var result = new double?[n];
-        double sum = 0, sumSq = 0; int count = 0;
+        int count = 0;
+        double mean = 0, m2 = 0;
         var span = _column.Buffer.Span;
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i)) { double v = double.CreateChecked(span[i]); sum += v; sumSq += v * v; count++; }
+            if (!IsMissing(i))
+            {
+                double v = double.CreateChecked(span[i]);
+                count++;
+                double delta = v - mean;
+                mean += delta / count;
+                double delta2 = v - mean;
+                m2 += delta * delta2;
+            }
             if (count >= _minPeriods)
             {
                 if (count > 1)
-                {
-                    double mean = sum / count;
-                    result[i] = Math.Sqrt((sumSq - count * mean * mean) / (count - 1));
-                }
+                    result[i] = Math.Sqrt(m2 / (count - 1));
                 else
                     result[i] = double.NaN; // std of single value is NaN
             }
@@ -255,7 +305,7 @@ public class ExpandingWindow<T> where T : struct, INumber<T>
 
         for (int i = 0; i < n; i++)
         {
-            if (!_column.Nulls.IsNull(i))
+            if (!IsMissing(i))
                 accumulated.Add(double.CreateChecked(_column.Buffer.Span[i]));
 
             result[i] = accumulated.Count >= _minPeriods ? func(accumulated) : null;
@@ -281,6 +331,18 @@ public class EwmWindow<T> where T : struct, INumber<T>
             throw new ArgumentException("Either span or alpha must be provided.");
     }
 
+    /// <summary>Check if value at index is missing (null bitmask OR NaN for floating-point).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsMissing(int index)
+    {
+        if (_column.Nulls.IsNull(index)) return true;
+        if (typeof(T) == typeof(double))
+            return double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        if (typeof(T) == typeof(float))
+            return float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in _column.Buffer.Span[index])));
+        return false;
+    }
+
     public Column<double> Mean()
     {
         int n = _column.Length;
@@ -289,7 +351,7 @@ public class EwmWindow<T> where T : struct, INumber<T>
 
         for (int i = 0; i < n; i++)
         {
-            if (_column.Nulls.IsNull(i)) { result[i] = null; continue; }
+            if (IsMissing(i)) { result[i] = null; continue; }
             double val = double.CreateChecked(_column.Buffer.Span[i]);
             ewm = ewm is null ? val : _alpha * val + (1 - _alpha) * ewm.Value;
             result[i] = ewm;

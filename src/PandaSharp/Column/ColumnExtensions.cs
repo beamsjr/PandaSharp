@@ -11,6 +11,21 @@ namespace PandaSharp.Column;
 /// </summary>
 public static class ColumnExtensions
 {
+    /// <summary>
+    /// Returns true if the value at the given index is effectively missing:
+    /// either null in the bitmask, or NaN for floating-point types (double/float).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool IsMissing<T>(this Column<T> col, int index) where T : struct
+    {
+        if (col.Nulls.IsNull(index)) return true;
+        if (typeof(T) == typeof(double))
+            return double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in col.Buffer.Span[index])));
+        if (typeof(T) == typeof(float))
+            return float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in col.Buffer.Span[index])));
+        return false;
+    }
+
     // -- Comparisons --
 
     public static bool[] Gt<T>(this Column<T> col, T value)
@@ -108,6 +123,8 @@ public static class ColumnExtensions
     public static Column<T> Clip<T>(this Column<T> col, T lower, T upper)
         where T : struct, IComparisonOperators<T, T, bool>
     {
+        if (lower > upper)
+            throw new ArgumentException($"lower ({lower}) must be less than or equal to upper ({upper}).");
         var span = col.Buffer.Span;
         var result = new T?[col.Length];
         for (int i = 0; i < col.Length; i++)
@@ -220,7 +237,7 @@ public static class ColumnExtensions
         var span = col.Buffer.Span;
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             if (bestVal is null || span[i] < bestVal.Value)
             {
                 bestVal = span[i];
@@ -241,7 +258,7 @@ public static class ColumnExtensions
         var span = col.Buffer.Span;
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             if (bestVal is null || span[i] > bestVal.Value)
             {
                 bestVal = span[i];
@@ -270,7 +287,7 @@ public static class ColumnExtensions
         var result = new double?[col.Length];
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) { result[i] = null; continue; }
+            if (col.IsMissing(i)) { result[i] = null; continue; }
             result[i] = range == 0 ? 0.5 : (double.CreateChecked(span[i]) - dMin) / range;
         }
         return Column<double>.FromNullable(col.Name, result);
@@ -291,7 +308,7 @@ public static class ColumnExtensions
         var result = new double?[col.Length];
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) { result[i] = null; continue; }
+            if (col.IsMissing(i)) { result[i] = null; continue; }
             result[i] = (double.CreateChecked(span[i]) - mean.Value) / std.Value;
         }
         return Column<double>.FromNullable(col.Name, result);
@@ -517,29 +534,60 @@ public static class ColumnExtensions
     {
         if (col.Length == 0) return null;
         var span = col.Buffer.Span;
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
 
-        // Fast path: no nulls → SIMD for double
-        if (col.NullCount == 0)
+        // Fast path: no nulls → SIMD for double (only if no NaN values present)
+        if (col.NullCount == 0 && typeof(T) == typeof(double))
         {
-            if (typeof(T) == typeof(double))
+            var dSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(span);
+            // Check for NaN values before using SIMD fast path
+            bool hasNaN = false;
+            for (int i = 0; i < dSpan.Length; i++)
             {
-                var dSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(span);
-                return (T)(object)Storage.SimdOps.SumDouble(dSpan);
+                if (double.IsNaN(dSpan[i])) { hasNaN = true; break; }
             }
+            if (!hasNaN)
+                return (T)(object)Storage.SimdOps.SumDouble(dSpan);
         }
 
-        // Fallback: scalar loop with null checks
+        // Fallback: scalar loop with null/NaN checks
+        // Use checked arithmetic for integer types to throw on overflow
+        // instead of silently producing wrong results.
         T sum = T.Zero;
-        for (int i = 0; i < span.Length; i++)
-            if (!col.Nulls.IsNull(i)) sum += span[i];
+        if (typeof(T) == typeof(int) || typeof(T) == typeof(long))
+        {
+            checked
+            {
+                for (int i = 0; i < span.Length; i++)
+                    if (!col.IsMissing(i)) sum += span[i];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < span.Length; i++)
+                if (!col.IsMissing(i)) sum += span[i];
+        }
         return sum;
+    }
+
+    /// <summary>
+    /// Returns the count of non-null, non-NaN values.
+    /// </summary>
+    internal static int ValidCount<T>(this Column<T> col) where T : struct, INumber<T>
+    {
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        if (!isFloating) return col.Count();
+        int count = 0;
+        for (int i = 0; i < col.Length; i++)
+            if (!col.IsMissing(i)) count++;
+        return count;
     }
 
     public static double? Mean<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
         if (col.Length == 0) return null;
-        int validCount = col.Count();
+        int validCount = col.ValidCount();
         if (validCount == 0) return null;
         var sum = col.Sum()!.Value;
         return double.CreateChecked(sum) / validCount;
@@ -553,7 +601,7 @@ public static class ColumnExtensions
         T? min = null;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             if (min is null || span[i] < min.Value)
                 min = span[i];
         }
@@ -568,7 +616,7 @@ public static class ColumnExtensions
         T? max = null;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             if (max is null || span[i] > max.Value)
                 max = span[i];
         }
@@ -636,16 +684,21 @@ public static class ColumnExtensions
 
     private static T[] GetNonNullCopy<T>(Column<T> col) where T : struct, INumber<T>
     {
-        // Fast path: no nulls → direct span copy (avoids List intermediate)
-        if (col.NullCount == 0)
-            return col.Buffer.Span.ToArray();
-
         var span = col.Buffer.Span;
-        var result = new T[col.Count()];
-        int j = 0;
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+
+        // Fast path: no nulls and no NaN
+        if (col.NullCount == 0 && (!isFloating || !HasNaN(col)))
+            return span.ToArray();
+
+        // Filter null and NaN values
+        var list = new List<T>(col.Length);
         for (int i = 0; i < span.Length; i++)
-            if (!col.Nulls.IsNull(i)) result[j++] = span[i];
-        return result;
+        {
+            if (col.IsMissing(i)) continue;
+            list.Add(span[i]);
+        }
+        return list.ToArray();
     }
 
     public static double? Quantile<T>(this Column<T> col, double p)
@@ -688,14 +741,14 @@ public static class ColumnExtensions
     public static double? Var<T>(this Column<T> col, int ddof = 1)
         where T : struct, INumber<T>
     {
-        int n = col.Count();
+        int n = col.ValidCount();
         if (n <= ddof) return null;
         var mean = col.Mean()!.Value;
         var span = col.Buffer.Span;
         double sumSq = 0;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             double diff = double.CreateChecked(span[i]) - mean;
             sumSq += diff * diff;
         }
@@ -705,12 +758,12 @@ public static class ColumnExtensions
     public static T? Mode<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        if (col.Count() == 0) return null;
+        if (col.ValidCount() == 0) return null;
         var counts = new Dictionary<T, int>();
         var span = col.Buffer.Span;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             var val = span[i];
             counts[val] = counts.GetValueOrDefault(val) + 1;
         }
@@ -720,7 +773,7 @@ public static class ColumnExtensions
     public static double? Skew<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        int n = col.Count();
+        int n = col.ValidCount();
         if (n < 3) return null;
         var mean = col.Mean()!.Value;
         var std = col.Std()!.Value;
@@ -730,7 +783,7 @@ public static class ColumnExtensions
         double sum3 = 0;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             double diff = (double.CreateChecked(span[i]) - mean) / std;
             sum3 += diff * diff * diff;
         }
@@ -741,7 +794,7 @@ public static class ColumnExtensions
     public static double? Kurtosis<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        int n = col.Count();
+        int n = col.ValidCount();
         if (n < 4) return null;
         var mean = col.Mean()!.Value;
         var std = col.Std()!.Value;
@@ -751,7 +804,7 @@ public static class ColumnExtensions
         double sum4 = 0;
         for (int i = 0; i < span.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) continue;
+            if (col.IsMissing(i)) continue;
             double diff = (double.CreateChecked(span[i]) - mean) / std;
             sum4 += diff * diff * diff * diff;
         }
@@ -763,7 +816,7 @@ public static class ColumnExtensions
     public static double? Sem<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        int n = col.Count();
+        int n = col.ValidCount();
         if (n == 0) return null;
         var std = col.Std();
         return std.HasValue ? std.Value / Math.Sqrt(n) : null;
@@ -771,27 +824,79 @@ public static class ColumnExtensions
 
     // -- Cumulative Operations --
 
+    /// <summary>
+    /// Quick scan for NaN presence in a floating-point column's buffer.
+    /// Returns false for non-floating types.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasNaN<T>(Column<T> col) where T : struct
+    {
+        if (typeof(T) == typeof(double))
+        {
+            var span = col.Buffer.Span;
+            for (int i = 0; i < span.Length; i++)
+                if (double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in span[i]))))
+                    return true;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var span = col.Buffer.Span;
+            for (int i = 0; i < span.Length; i++)
+                if (float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in span[i]))))
+                    return true;
+        }
+        return false;
+    }
+
     public static Column<T> CumSum<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        // Fast path: no nulls → write directly to Arrow byte buffer
-        if (col.NullCount == 0)
+        bool isIntegerType = typeof(T) == typeof(int) || typeof(T) == typeof(long);
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+
+        // Fast path: no nulls and no NaN → write directly to Arrow byte buffer
+        if (col.NullCount == 0 && (!isFloating || !HasNaN(col)))
         {
             int n = col.Length;
             var bytes = new byte[n * Unsafe.SizeOf<T>()];
             var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
             var span = col.Buffer.Span;
             T running = T.Zero;
-            for (int i = 0; i < n; i++) { running += span[i]; result[i] = running; }
+            if (isIntegerType)
+            {
+                checked
+                {
+                    for (int i = 0; i < n; i++) { running += span[i]; result[i] = running; }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < n; i++) { running += span[i]; result[i] = running; }
+            }
             return Column<T>.WrapResult(col.Name, bytes, n);
         }
         var values = new T?[col.Length];
         T running2 = T.Zero;
-        for (int i = 0; i < col.Length; i++)
+        if (isIntegerType)
         {
-            if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
-            running2 += col.Buffer.Span[i];
-            values[i] = running2;
+            checked
+            {
+                for (int i = 0; i < col.Length; i++)
+                {
+                    if (col.IsMissing(i)) { values[i] = null; continue; }
+                    running2 += col.Buffer.Span[i];
+                    values[i] = running2;
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < col.Length; i++)
+            {
+                if (col.IsMissing(i)) { values[i] = null; continue; }
+                running2 += col.Buffer.Span[i];
+                values[i] = running2;
+            }
         }
         return Column<T>.FromNullable(col.Name, values);
     }
@@ -799,13 +904,25 @@ public static class ColumnExtensions
     public static Column<T> CumProd<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        // Fast path: no nulls and no NaN
+        if (col.NullCount == 0 && (!isFloating || !HasNaN(col)))
+        {
+            int n = col.Length;
+            var bytes = new byte[n * Unsafe.SizeOf<T>()];
+            var result = MemoryMarshal.Cast<byte, T>(bytes.AsSpan());
+            var span = col.Buffer.Span;
+            T running = T.One;
+            for (int i = 0; i < n; i++) { running *= span[i]; result[i] = running; }
+            return Column<T>.WrapResult(col.Name, bytes, n);
+        }
         var values = new T?[col.Length];
-        T running = T.One;
+        T running2 = T.One;
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
-            running *= col.Buffer.Span[i];
-            values[i] = running;
+            if (col.IsMissing(i)) { values[i] = null; continue; }
+            running2 *= col.Buffer.Span[i];
+            values[i] = running2;
         }
         return Column<T>.FromNullable(col.Name, values);
     }
@@ -813,7 +930,8 @@ public static class ColumnExtensions
     public static Column<T> CumMin<T>(this Column<T> col)
         where T : struct, IComparisonOperators<T, T, bool>
     {
-        if (col.NullCount == 0)
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        if (col.NullCount == 0 && (!isFloating || !HasNaN(col)))
         {
             int n = col.Length;
             if (n == 0) return Column<T>.WrapResult(col.Name, Array.Empty<byte>(), 0);
@@ -829,7 +947,7 @@ public static class ColumnExtensions
         T? running2 = null;
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
+            if (col.IsMissing(i)) { values[i] = null; continue; }
             var val = col.Buffer.Span[i];
             running2 = running2 is null || val < running2.Value ? val : running2;
             values[i] = running2;
@@ -840,7 +958,8 @@ public static class ColumnExtensions
     public static Column<T> CumMax<T>(this Column<T> col)
         where T : struct, IComparisonOperators<T, T, bool>
     {
-        if (col.NullCount == 0)
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        if (col.NullCount == 0 && (!isFloating || !HasNaN(col)))
         {
             int n = col.Length;
             if (n == 0) return Column<T>.WrapResult(col.Name, Array.Empty<byte>(), 0);
@@ -856,7 +975,7 @@ public static class ColumnExtensions
         T? running2 = null;
         for (int i = 0; i < col.Length; i++)
         {
-            if (col.Nulls.IsNull(i)) { values[i] = null; continue; }
+            if (col.IsMissing(i)) { values[i] = null; continue; }
             var val = col.Buffer.Span[i];
             running2 = running2 is null || val > running2.Value ? val : running2;
             values[i] = running2;
@@ -869,18 +988,25 @@ public static class ColumnExtensions
     public static Column<double> PctChange<T>(this Column<T> col, int periods = 1)
         where T : struct, INumber<T>
     {
-        // Fast path for Column<double> with no nulls — uses nullable for first 'periods' elements
+        int absPeriods = Math.Abs(periods);
+        // Determine valid index range: for each i, we need both i and (i - periods) in [0, n)
+        // When periods > 0: i in [periods, n)       → compare to past
+        // When periods < 0: i in [0, n - |periods|)  → compare to future (i - periods = i + |periods|)
+        int start = periods >= 0 ? periods : 0;
+        int end = periods >= 0 ? col.Length : col.Length - absPeriods;
+
+        // Fast path for Column<double> with no nulls
         if (col is Column<double> dc && dc.NullCount == 0)
         {
             int n = dc.Length;
             var result = new double?[n];
             var span = dc.Buffer.Span;
-            for (int i = periods; i < n; i++)
-                result[i] = span[i - periods] != 0 ? (span[i] - span[i - periods]) / span[i - periods] : null;
+            for (int i = start; i < end; i++)
+                result[i] = (span[i] - span[i - periods]) / span[i - periods]; // IEEE 754: 0/0=NaN, x/0=+/-Inf
             return Column<double>.FromNullable(dc.Name, result);
         }
         var values = new double?[col.Length];
-        for (int i = periods; i < col.Length; i++)
+        for (int i = start; i < end; i++)
         {
             if (col.Nulls.IsNull(i) || col.Nulls.IsNull(i - periods))
             {
@@ -888,9 +1014,8 @@ public static class ColumnExtensions
                 continue;
             }
             double prev = double.CreateChecked(col.Buffer.Span[i - periods]);
-            if (prev == 0) { values[i] = null; continue; }
             double curr = double.CreateChecked(col.Buffer.Span[i]);
-            values[i] = (curr - prev) / prev;
+            values[i] = (curr - prev) / prev; // IEEE 754: 0/0=NaN, x/0=+/-Inf
         }
         return Column<double>.FromNullable(col.Name, values);
     }
@@ -898,8 +1023,12 @@ public static class ColumnExtensions
     public static Column<double> Diff<T>(this Column<T> col, int periods = 1)
         where T : struct, INumber<T>
     {
+        int absPeriods = Math.Abs(periods);
+        int start = periods >= 0 ? periods : 0;
+        int end = periods >= 0 ? col.Length : col.Length - absPeriods;
+
         var values = new double?[col.Length];
-        for (int i = periods; i < col.Length; i++)
+        for (int i = start; i < end; i++)
         {
             if (col.Nulls.IsNull(i) || col.Nulls.IsNull(i - periods))
             {
@@ -918,12 +1047,19 @@ public static class ColumnExtensions
     public static T? Prod<T>(this Column<T> col)
         where T : struct, INumber<T>
     {
-        if (col.Length == 0 || col.Count() == 0) return null;
+        if (col.Length == 0) return null;
         var span = col.Buffer.Span;
         T product = T.One;
+        bool hasValid = false;
         for (int i = 0; i < span.Length; i++)
-            if (!col.Nulls.IsNull(i)) product *= span[i];
-        return product;
+        {
+            if (!col.IsMissing(i))
+            {
+                product *= span[i];
+                hasValid = true;
+            }
+        }
+        return hasValid ? product : null;
     }
 
     // -- CastColumn: convert column type --
@@ -1079,9 +1215,9 @@ public static class ColumnExtensions
     private static T[] GetSortedNonNull<T>(Column<T> col) where T : struct, INumber<T>
     {
         var span = col.Buffer.Span;
-        var list = new List<T>(col.Count());
+        var list = new List<T>(col.Length);
         for (int i = 0; i < span.Length; i++)
-            if (!col.Nulls.IsNull(i)) list.Add(span[i]);
+            if (!col.IsMissing(i)) list.Add(span[i]);
         var arr = list.ToArray();
         Array.Sort(arr);
         return arr;

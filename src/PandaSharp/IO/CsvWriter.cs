@@ -36,7 +36,8 @@ public static class CsvWriter
 
         if (options.WriteHeader)
         {
-            writer.WriteLine(string.Join(options.Delimiter, df.ColumnNames));
+            var quotedHeaders = df.ColumnNames.Select(name => QuoteHeaderIfNeeded(name, options.Delimiter)).ToArray();
+            writer.WriteLine(string.Join(options.Delimiter, quotedHeaders));
         }
 
         for (int r = 0; r < df.RowCount; r++)
@@ -50,6 +51,15 @@ public static class CsvWriter
             }
             writer.WriteLine(string.Join(options.Delimiter, fields));
         }
+    }
+
+    private static string QuoteHeaderIfNeeded(string name, char delimiter)
+    {
+        if (name.Contains(delimiter) || name.Contains('"') || name.Contains('\n') || name.Contains('\r'))
+        {
+            return $"\"{name.Replace("\"", "\"\"")}\"";
+        }
+        return name;
     }
 
     private static string FormatValue(object? value, CsvWriteOptions options)
@@ -68,10 +78,15 @@ public static class CsvWriter
         if (str.Contains("\\\""))
             str = str.Replace("\\\"", "\"");
 
-        // Quote if contains delimiter, quote, or newline
-        if (str.Contains(options.Delimiter) || str.Contains('"') || str.Contains('\n'))
+        // Quote if contains delimiter, quote, or newline/carriage return
+        if (str.Contains(options.Delimiter) || str.Contains('"') || str.Contains('\n') || str.Contains('\r'))
         {
             str = $"\"{str.Replace("\"", "\"\"")}\"";
+        }
+        // Quote empty strings to distinguish from null (which is written as unquoted NullRepresentation)
+        else if (str.Length == 0 && str == options.NullRepresentation)
+        {
+            str = "\"\"";
         }
 
         return str;

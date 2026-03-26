@@ -30,6 +30,8 @@ public class FourierFeatures : ITransformer
     {
         if (periods.Length == 0)
             throw new ArgumentException("At least one period must be specified.", nameof(periods));
+        if (periods.Any(p => p <= 0))
+            throw new ArgumentOutOfRangeException(nameof(periods), "All periods must be > 0.");
         if (harmonics < 1)
             throw new ArgumentOutOfRangeException(nameof(harmonics), "Harmonics must be >= 1.");
 
@@ -58,7 +60,7 @@ public class FourierFeatures : ITransformer
         if (!string.IsNullOrEmpty(_indexColumn) && df.ColumnNames.Contains(_indexColumn))
         {
             var col = df[_indexColumn];
-            if (col.DataType == typeof(DateTime))
+            if (col.DataType == typeof(DateTime) && n > 0)
             {
                 var dtCol = df.GetColumn<DateTime>(_indexColumn);
                 var span = dtCol.Values;

@@ -59,7 +59,7 @@ public class GeoColumn
         {
             var lats = Latitudes;
             var lons = Longitudes;
-            return new GeoPoint(lats[index], lons[index]);
+            return GeoPoint.FromProjected(lats[index], lons[index]);
         }
     }
 

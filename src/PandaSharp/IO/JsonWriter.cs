@@ -69,10 +69,16 @@ public static class JsonWriter
                 writer.WriteNumberValue(l);
                 break;
             case float f:
-                writer.WriteNumberValue(f);
+                if (float.IsNaN(f) || float.IsInfinity(f))
+                    writer.WriteNullValue();
+                else
+                    writer.WriteNumberValue(f);
                 break;
             case double d:
-                writer.WriteNumberValue(d);
+                if (double.IsNaN(d) || double.IsInfinity(d))
+                    writer.WriteNullValue();
+                else
+                    writer.WriteNumberValue(d);
                 break;
             case bool b:
                 writer.WriteBooleanValue(b);

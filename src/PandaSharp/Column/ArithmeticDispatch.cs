@@ -39,7 +39,11 @@ internal static class ArithmeticDispatch<T> where T : struct
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Column<>)
                         && m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Column<>));
         var generic = method.MakeGenericMethod(typeof(T));
-        return (a, b) => (Column<T>)generic.Invoke(null, [a, b])!;
+        return (a, b) =>
+        {
+            try { return (Column<T>)generic.Invoke(null, [a, b])!; }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null) { throw ex.InnerException; }
+        };
     }
 
     private static Func<Column<T>, T, Column<T>> ResolveScalar(string name)
@@ -55,7 +59,11 @@ internal static class ArithmeticDispatch<T> where T : struct
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Column<>)
                         && !m.GetParameters()[1].ParameterType.IsGenericType);
         var generic = method.MakeGenericMethod(typeof(T));
-        return (col, scalar) => (Column<T>)generic.Invoke(null, [col, scalar])!;
+        return (col, scalar) =>
+        {
+            try { return (Column<T>)generic.Invoke(null, [col, scalar])!; }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null) { throw ex.InnerException; }
+        };
     }
 
     private static Func<Column<T>, Column<T>> ResolveUnary(string name)
@@ -68,6 +76,10 @@ internal static class ArithmeticDispatch<T> where T : struct
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .First(m => m.Name == name && m.GetParameters().Length == 1);
         var generic = method.MakeGenericMethod(typeof(T));
-        return col => (Column<T>)generic.Invoke(null, [col])!;
+        return col =>
+        {
+            try { return (Column<T>)generic.Invoke(null, [col])!; }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null) { throw ex.InnerException; }
+        };
     }
 }

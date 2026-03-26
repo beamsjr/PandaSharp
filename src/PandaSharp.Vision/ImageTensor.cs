@@ -90,6 +90,12 @@ public class ImageTensor
     {
         if (tensor.Rank < 3 || tensor.Rank > 5)
             throw new ArgumentException("ImageTensor requires rank 3 [H,W,C], rank 4 [N,H,W,C], or rank 5 [N,F,H,W,C].");
+        // Validate that all spatial dimensions are positive
+        for (int i = 0; i < tensor.Rank; i++)
+        {
+            if (tensor.Shape[i] <= 0)
+                throw new ArgumentException($"All tensor dimensions must be positive, but dimension {i} is {tensor.Shape[i]}.");
+        }
         _tensor = tensor;
         ChannelOrder = order;
     }

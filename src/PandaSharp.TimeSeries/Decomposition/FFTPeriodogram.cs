@@ -25,7 +25,7 @@ public static class FFTPeriodogram
         if (series.Length == 0) throw new ArgumentException("Series must not be empty.", nameof(series));
 
         int n = series.Length;
-        int fftSize = NextPowerOfTwo(n);
+        int fftSize = NextPowerOfTwo(Math.Max(n, 2));
 
         // Prepare complex input (zero-padded)
         var real = new double[fftSize];

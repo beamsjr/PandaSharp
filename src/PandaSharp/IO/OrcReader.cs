@@ -147,6 +147,7 @@ public static class OrcReader
             5 => BuildFloatColumn(name, presenceBytes, dataReader, rowCount, hasNulls),
             6 => BuildDoubleColumn(name, presenceBytes, dataReader, rowCount, hasNulls),
             7 => BuildStringColumn(name, presenceBytes, dataReader, rowCount),
+            8 => BuildDateTimeColumn(name, presenceBytes, dataReader, rowCount, hasNulls),
             _ => throw new NotSupportedException($"Unsupported ORC type code: {typeCode}")
         };
     }
@@ -291,6 +292,26 @@ public static class OrcReader
         for (int r = 0; r < rowCount; r++)
             arr[r] = reader.ReadDouble();
         return new Column<double>(name, arr);
+    }
+
+    private static IColumn BuildDateTimeColumn(string name, byte[] presence,
+        BinaryReader reader, int rowCount, bool hasNulls)
+    {
+        if (hasNulls)
+        {
+            var values = new DateTime?[rowCount];
+            for (int r = 0; r < rowCount; r++)
+            {
+                var ticks = reader.ReadInt64();
+                values[r] = presence[r] == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+            }
+            return Column<DateTime>.FromNullable(name, values);
+        }
+
+        var arr = new DateTime[rowCount];
+        for (int r = 0; r < rowCount; r++)
+            arr[r] = new DateTime(reader.ReadInt64(), DateTimeKind.Utc);
+        return new Column<DateTime>(name, arr);
     }
 
     private static IColumn BuildStringColumn(string name, byte[] presence,

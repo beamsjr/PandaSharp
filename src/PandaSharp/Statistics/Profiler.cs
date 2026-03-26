@@ -106,7 +106,9 @@ public static class Profiler
         for (int i = 0; i < col.Length; i++)
         {
             if (col.IsNull(i)) continue;
-            values.Add(allValues[i]);
+            double v = allValues[i];
+            if (double.IsNaN(v)) continue; // skip NaN values
+            values.Add(v);
         }
 
         if (values.Count == 0) return profile;

@@ -110,7 +110,7 @@ public static class MetricsCalculator
         }
 
         double mse = sumSqErr / n;
-        double r2 = ssTot > 0 ? 1 - sumSqErr / ssTot : 0;
+        double r2 = ssTot > 0 ? 1 - sumSqErr / ssTot : (sumSqErr == 0 ? 1.0 : 0.0);
 
         return new RegressionResult(
             MSE: mse,

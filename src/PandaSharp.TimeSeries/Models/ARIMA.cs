@@ -205,22 +205,44 @@ public class ARIMA : IForecaster
         var forecastDiff = new double[horizon];
         Array.Copy(extended, n, forecastDiff, 0, horizon);
 
-        var fullSeries = new double[_history.Length + horizon];
-        Array.Copy(_history, fullSeries, _history.Length);
-
-        // Undo differencing by cumulative summation
-        var diffFull = new double[_diffSeries.Length + horizon];
-        Array.Copy(_diffSeries, diffFull, _diffSeries.Length);
-        Array.Copy(forecastDiff, 0, diffFull, _diffSeries.Length, horizon);
-
-        var result = diffFull;
+        // Build the chain of differenced series from the original history
+        // diffChain[0] = original history, diffChain[k] = k-times differenced
+        var diffChain = new double[_d + 1][];
+        diffChain[0] = (double[])_history.Clone();
         for (int dd = 0; dd < _d; dd++)
-            result = Integrate(result, _history, dd);
+            diffChain[dd + 1] = Difference(diffChain[dd]);
+
+        // Start with the fully-differenced series (known + forecast)
+        var current = new double[_diffSeries.Length + horizon];
+        Array.Copy(_diffSeries, current, _diffSeries.Length);
+        Array.Copy(forecastDiff, 0, current, _diffSeries.Length, horizon);
+
+        // Undo differencing one level at a time: from d-times to (d-1)-times, etc.
+        for (int dd = _d - 1; dd >= 0; dd--)
+        {
+            // diffChain[dd] is the dd-times differenced original series
+            // We need to extend it with the forecast portion via cumulative sum
+            var prev = diffChain[dd];
+            var next = new double[prev.Length + horizon];
+            Array.Copy(prev, next, prev.Length);
+
+            // The forecast portion: cumsum from last known value of this level
+            double lastVal = prev[^1];
+            for (int i = 0; i < horizon; i++)
+            {
+                // current[knownLen + i] is the (dd+1)-times differenced forecast value
+                // Adding it to the running sum gives the dd-times differenced value
+                lastVal += current[diffChain[dd + 1].Length + i];
+                next[prev.Length + i] = lastVal;
+            }
+
+            current = next;
+        }
 
         for (int h = 0; h < horizon; h++)
         {
             dates[h] = _dates[^1] + _step * (h + 1);
-            values[h] = result[_diffSeries.Length + h];
+            values[h] = current[_history.Length + h];
         }
 
         return (dates, values);
@@ -236,35 +258,6 @@ public class ARIMA : IForecaster
         return result;
     }
 
-    /// <summary>Integrate a differenced series back using originals for initial values.</summary>
-    private static double[] Integrate(double[] diffSeries, double[] original, int diffLevel)
-    {
-        // Compute the series at the previous differencing level from the original
-        var temp = (double[])original.Clone();
-        for (int dd = 0; dd < diffLevel; dd++)
-            temp = Difference(temp);
-
-        double lastVal = temp.Length > 0 ? temp[^1] : 0;
-
-        var result = new double[diffSeries.Length];
-        // The known portion gets the actual values from the previous differencing level
-        int knownLen = temp.Length;
-        for (int i = 0; i < diffSeries.Length; i++)
-        {
-            if (i < knownLen)
-            {
-                result[i] = temp[i];
-                lastVal = temp[i];
-            }
-            else
-            {
-                lastVal += diffSeries[i];
-                result[i] = lastVal;
-            }
-        }
-
-        return result;
-    }
 
     /// <summary>Fit AR(p) coefficients using Yule-Walker equations solved via Levinson-Durbin.</summary>
     private static double[] FitAR(double[] centered, int p)

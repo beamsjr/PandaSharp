@@ -3,13 +3,14 @@
   <PropertyGroup>
     <RootNamespace>PandaSharp.Viz</RootNamespace>
     <PackageId>PandaSharp.Viz</PackageId>
-    <Description>Interactive Plotly.js visualizations for PandaSharp DataFrames</Description>
+    <Description>Interactive D3.js visualizations for PandaSharp DataFrames</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>visualization;charts;plotly;dataframe;interactive</PackageTags>
+    <PackageTags>visualization;charts;d3;dataframe;interactive</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PandaSharp\PandaSharp.csproj" />
+    <ProjectReference Include="..\PandaSharp.ML\PandaSharp.ML.csproj" />
   </ItemGroup>
 
   <ItemGroup>

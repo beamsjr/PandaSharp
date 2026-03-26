@@ -47,7 +47,7 @@ public class FacetGridBuilder
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<!DOCTYPE html><html><head><meta charset='utf-8'>");
-        sb.AppendLine("<script src='https://cdn.plot.ly/plotly-2.35.2.min.js'></script>");
+        sb.AppendLine($"<script src='{Rendering.D3HtmlRenderer.CdnUrl}'></script>");
         if (_title is not null) sb.AppendLine($"<title>{_title}</title>");
         sb.AppendLine("<style>body{font-family:sans-serif;} .facet-grid{display:flex;flex-wrap:wrap;gap:10px;} .facet-cell{}</style>");
         sb.AppendLine("</head><body>");

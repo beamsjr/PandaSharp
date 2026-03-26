@@ -19,6 +19,9 @@ public class RandomForestRegressor : IModel
 
     private DecisionTreeRegressor[]? _trees;
 
+    /// <summary>Access individual trees for inspection/visualization.</summary>
+    internal DecisionTreeRegressor[]? Trees => _trees;
+
     /// <inheritdoc />
     public string Name => "RandomForestRegressor";
 
@@ -46,6 +49,8 @@ public class RandomForestRegressor : IModel
         int minSamplesSplit = 2,
         int minSamplesLeaf = 1)
     {
+        if (nEstimators < 1)
+            throw new ArgumentOutOfRangeException(nameof(nEstimators), "nEstimators must be >= 1.");
         _nEstimators = nEstimators;
         _maxDepth = maxDepth;
         _maxFeatures = maxFeatures;
@@ -168,6 +173,6 @@ public class RandomForestRegressor : IModel
             ssTot += diffMean * diffMean;
         }
 
-        return ssTot == 0 ? 1.0 : 1.0 - ssRes / ssTot;
+        return ssTot == 0 ? (ssRes == 0 ? 1.0 : 0.0) : 1.0 - ssRes / ssTot;
     }
 }

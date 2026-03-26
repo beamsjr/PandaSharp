@@ -104,6 +104,9 @@ public static class AvroWriter
             case double d:
                 writer.Write(d);
                 break;
+            case DateTime dt:
+                WriteZigZagLong(writer, dt.Ticks);
+                break;
             case string s:
                 var bytes = Encoding.UTF8.GetBytes(s);
                 WriteZigZagLong(writer, bytes.Length);
@@ -165,12 +168,33 @@ public static class AvroWriter
         if (dt == typeof(float)) return "float";
         if (dt == typeof(double)) return "double";
         if (dt == typeof(string)) return "string";
+        if (dt == typeof(DateTime)) return "long"; // DateTime stored as ticks
         throw new NotSupportedException($"Unsupported column type: {dt.Name}");
     }
 
     private static string EscapeJsonString(string s)
     {
-        return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        var sb = new StringBuilder(s.Length);
+        foreach (char c in s)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                default:
+                    if (c < 0x20)
+                        sb.Append($"\\u{(int)c:X4}");
+                    else
+                        sb.Append(c);
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     private static void WriteZigZagLong(BinaryWriter writer, long value)

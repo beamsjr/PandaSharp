@@ -674,25 +674,48 @@ public class GroupedDataFrame
             int nGroups = uniques.Length;
             // Pre-allocate lists with estimated size
             var groupLists = new List<int>[nGroups];
-            int avgSize = _source.RowCount / nGroups;
+            int avgSize = Math.Max(1, _source.RowCount / Math.Max(nGroups, 1));
             for (int g = 0; g < nGroups; g++)
                 groupLists[g] = new List<int>(avgSize + avgSize / 4);
+            List<int>? dictNullGroup = null;
             for (int r = 0; r < _source.RowCount; r++)
-                groupLists[codes[r]].Add(r);
-            var result = new Dictionary<GroupKey, List<int>>(nGroups);
+            {
+                if (codes[r] < 0)
+                {
+                    // null value: code is -1
+                    if (_nullMode == NullGroupingMode.Exclude)
+                        continue;
+                    dictNullGroup ??= new List<int>();
+                    dictNullGroup.Add(r);
+                }
+                else
+                {
+                    groupLists[codes[r]].Add(r);
+                }
+            }
+            var result = new Dictionary<GroupKey, List<int>>(nGroups + (dictNullGroup is not null ? 1 : 0));
             for (int g = 0; g < nGroups; g++)
                 result[new GroupKey(new object?[] { uniques[g] })] = groupLists[g];
+            if (dictNullGroup is not null)
+                result[new GroupKey(new object?[] { null })] = dictNullGroup;
             return result;
         }
 
         var vals = col.GetValues();
         var stringMap = new Dictionary<string, List<int>>(_source.RowCount / 100, StringComparer.Ordinal);
+        List<int>? nullGroup = null;
 
         for (int r = 0; r < _source.RowCount; r++)
         {
-            if (vals[r] is null && _nullMode == NullGroupingMode.Exclude)
+            if (vals[r] is null)
+            {
+                if (_nullMode == NullGroupingMode.Exclude)
+                    continue;
+                nullGroup ??= new List<int>();
+                nullGroup.Add(r);
                 continue;
-            var key = vals[r] ?? "";
+            }
+            var key = vals[r]!;
             if (!stringMap.TryGetValue(key, out var list))
             {
                 list = new List<int>();
@@ -701,9 +724,11 @@ public class GroupedDataFrame
             list.Add(r);
         }
 
-        var groups = new Dictionary<GroupKey, List<int>>(stringMap.Count);
+        var groups = new Dictionary<GroupKey, List<int>>(stringMap.Count + (nullGroup is not null ? 1 : 0));
         foreach (var (key, list) in stringMap)
             groups[new GroupKey(new object?[] { key })] = list;
+        if (nullGroup is not null)
+            groups[new GroupKey(new object?[] { null })] = nullGroup;
         return groups;
     }
 
@@ -714,12 +739,21 @@ public class GroupedDataFrame
         var dict2 = DictEncoding.Encode(col2);
         var codes1 = dict1.Codes;
         var codes2 = dict2.Codes;
-        int n2 = dict2.Uniques.Length;
+        // Use (nUniques + 1) to reserve slot 0 for null; remap -1 → 0, valid codes → code+1
+        int n1Plus = dict1.Uniques.Length + 1;
+        int n2Plus = dict2.Uniques.Length + 1;
 
         var compositeMap = new Dictionary<long, List<int>>(_source.RowCount / 100);
         for (int r = 0; r < _source.RowCount; r++)
         {
-            long key = (long)codes1[r] * n2 + codes2[r];
+            bool hasNull = codes1[r] < 0 || codes2[r] < 0;
+            if (hasNull && _nullMode == NullGroupingMode.Exclude)
+                continue;
+
+            // Remap: null (-1) → 0, valid code c → c + 1
+            long mapped1 = codes1[r] + 1;
+            long mapped2 = codes2[r] + 1;
+            long key = mapped1 * n2Plus + mapped2;
             if (!compositeMap.TryGetValue(key, out var list))
             {
                 list = new List<int>();
@@ -731,9 +765,11 @@ public class GroupedDataFrame
         var groups = new Dictionary<GroupKey, List<int>>(compositeMap.Count);
         foreach (var (compositeKey, list) in compositeMap)
         {
-            int c1 = (int)(compositeKey / n2);
-            int c2 = (int)(compositeKey % n2);
-            groups[new GroupKey(new object?[] { dict1.Uniques[c1], dict2.Uniques[c2] })] = list;
+            int m1 = (int)(compositeKey / n2Plus);
+            int m2 = (int)(compositeKey % n2Plus);
+            string? v1 = m1 == 0 ? null : dict1.Uniques[m1 - 1];
+            string? v2 = m2 == 0 ? null : dict2.Uniques[m2 - 1];
+            groups[new GroupKey(new object?[] { v1, v2 })] = list;
         }
         return groups;
     }
@@ -742,11 +778,18 @@ public class GroupedDataFrame
     {
         var span = col.Buffer.Span;
         var intMap = new Dictionary<int, List<int>>();
+        List<int>? nullGroup = null;
 
         for (int r = 0; r < _source.RowCount; r++)
         {
-            if (_nullMode == NullGroupingMode.Exclude && col.Nulls.IsNull(r))
+            if (col.Nulls.IsNull(r))
+            {
+                if (_nullMode == NullGroupingMode.Exclude)
+                    continue;
+                nullGroup ??= new List<int>();
+                nullGroup.Add(r);
                 continue;
+            }
             var key = span[r];
             if (!intMap.TryGetValue(key, out var list))
             {
@@ -756,9 +799,11 @@ public class GroupedDataFrame
             list.Add(r);
         }
 
-        var groups = new Dictionary<GroupKey, List<int>>(intMap.Count);
+        var groups = new Dictionary<GroupKey, List<int>>(intMap.Count + (nullGroup is not null ? 1 : 0));
         foreach (var (key, list) in intMap)
             groups[new GroupKey(new object?[] { key })] = list;
+        if (nullGroup is not null)
+            groups[new GroupKey(new object?[] { null })] = nullGroup;
         return groups;
     }
 
@@ -832,7 +877,7 @@ public class GroupedDataFrame
                 {
                     double sum = 0;
                     foreach (var idx in _groups[groupKeys[g]])
-                        if (!dColSum.Nulls.IsNull(idx)) sum += span[idx];
+                        if (!dColSum.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) sum += span[idx];
                     vals[g] = sum;
                 }
                 columns.Add(new Column.Column<double>(outputName, vals));
@@ -848,7 +893,7 @@ public class GroupedDataFrame
                     double sum = 0; int count = 0;
                     foreach (var idx in _groups[groupKeys[g]])
                     {
-                        if (!dColMean.Nulls.IsNull(idx)) { sum += span[idx]; count++; }
+                        if (!dColMean.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) { sum += span[idx]; count++; }
                     }
                     vals[g] = count > 0 ? sum / count : double.NaN;
                 }
@@ -896,9 +941,12 @@ public class GroupedDataFrame
                 for (int g = 0; g < groupKeys.Count; g++)
                 {
                     double min = double.MaxValue;
+                    bool found = false;
                     foreach (var idx in _groups[groupKeys[g]])
-                        if (!dColMin.Nulls.IsNull(idx) && span[idx] < min) min = span[idx];
-                    vals[g] = min == double.MaxValue ? double.NaN : min;
+                    {
+                        if (!dColMin.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) { if (span[idx] < min) min = span[idx]; found = true; }
+                    }
+                    vals[g] = found ? min : double.NaN;
                 }
                 columns.Add(new Column.Column<double>(outputName, vals));
                 continue;
@@ -912,9 +960,12 @@ public class GroupedDataFrame
                 for (int g = 0; g < groupKeys.Count; g++)
                 {
                     double max = double.MinValue;
+                    bool found = false;
                     foreach (var idx in _groups[groupKeys[g]])
-                        if (!dColMax.Nulls.IsNull(idx) && span[idx] > max) max = span[idx];
-                    vals[g] = max == double.MinValue ? double.NaN : max;
+                    {
+                        if (!dColMax.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) { if (span[idx] > max) max = span[idx]; found = true; }
+                    }
+                    vals[g] = found ? max : double.NaN;
                 }
                 columns.Add(new Column.Column<double>(outputName, vals));
                 continue;
@@ -930,12 +981,12 @@ public class GroupedDataFrame
                     var indices = _groups[groupKeys[g]];
                     double sum = 0; int count = 0;
                     foreach (var idx in indices)
-                        if (!dColStd.Nulls.IsNull(idx)) { sum += span[idx]; count++; }
-                    if (count <= 1) { vals[g] = 0; continue; }
+                        if (!dColStd.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) { sum += span[idx]; count++; }
+                    if (count <= 1) { vals[g] = double.NaN; continue; }
                     double mean = sum / count;
                     double sumSq = 0;
                     foreach (var idx in indices)
-                        if (!dColStd.Nulls.IsNull(idx)) { double d = span[idx] - mean; sumSq += d * d; }
+                        if (!dColStd.Nulls.IsNull(idx) && !double.IsNaN(span[idx])) { double d = span[idx] - mean; sumSq += d * d; }
                     vals[g] = Math.Sqrt(sumSq / (count - 1));
                 }
                 columns.Add(new Column.Column<double>(outputName, vals));
@@ -949,7 +1000,7 @@ public class GroupedDataFrame
                 {
                     int count = 0;
                     foreach (var idx in _groups[groupKeys[g]])
-                        if (!srcCol.IsNull(idx)) count++;
+                        if (!IsValueMissing(srcCol, idx)) count++;
                     vals[g] = count;
                 }
                 columns.Add(new Column.Column<int>(outputName, vals));
@@ -975,11 +1026,47 @@ public class GroupedDataFrame
 
         return func switch
         {
-            AggFunc.Count => indices.Count(i => !col.IsNull(i)),
-            AggFunc.First => col.GetObject(indices[0]),
-            AggFunc.Last => col.GetObject(indices[^1]),
+            AggFunc.Count => indices.Count(i => !IsValueMissing(col, i)),
+            AggFunc.First => FindFirstNonMissing(col, indices),
+            AggFunc.Last => FindLastNonMissing(col, indices),
             _ => ComputeNumericAggregate(col, indices, func)
         };
+    }
+
+    /// <summary>Find the first non-null, non-NaN value in the group.</summary>
+    private static object? FindFirstNonMissing(IColumn col, List<int> indices)
+    {
+        foreach (var idx in indices)
+        {
+            if (!IsValueMissing(col, idx))
+                return col.GetObject(idx);
+        }
+        return null;
+    }
+
+    /// <summary>Find the last non-null, non-NaN value in the group.</summary>
+    private static object? FindLastNonMissing(IColumn col, List<int> indices)
+    {
+        for (int i = indices.Count - 1; i >= 0; i--)
+        {
+            if (!IsValueMissing(col, indices[i]))
+                return col.GetObject(indices[i]);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Check if a value at the given index is missing: either null in the bitmask,
+    /// or NaN for floating-point columns (double/float).
+    /// </summary>
+    private static bool IsValueMissing(IColumn col, int index)
+    {
+        if (col.IsNull(index)) return true;
+        if (col is Column.Column<double> dc)
+            return double.IsNaN(dc.Buffer.Span[index]);
+        if (col is Column.Column<float> fc)
+            return float.IsNaN(fc.Buffer.Span[index]);
+        return false;
     }
 
     private static object? ComputeNumericAggregate(IColumn col, List<int> indices, AggFunc func)
@@ -999,7 +1086,7 @@ public class GroupedDataFrame
             var span = floatCol.Buffer.Span;
             for (int i = 0; i < indices.Count; i++)
             {
-                if (!col.IsNull(indices[i]))
+                if (!col.IsNull(indices[i]) && !float.IsNaN(span[indices[i]]))
                     values.Add((double)span[indices[i]]);
             }
         }
@@ -1012,12 +1099,24 @@ public class GroupedDataFrame
                     values.Add((double)span[indices[i]]);
             }
         }
+        else if (col is Column.Column<double> dblCol)
+        {
+            var span = dblCol.Buffer.Span;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                if (!col.IsNull(indices[i]) && !double.IsNaN(span[indices[i]]))
+                    values.Add(span[indices[i]]);
+            }
+        }
         else
         {
             foreach (var i in indices)
             {
                 if (col.IsNull(i)) continue;
-                values.Add(Convert.ToDouble(col.GetObject(i)));
+                var obj = col.GetObject(i);
+                if (obj is double d && double.IsNaN(d)) continue;
+                if (obj is float f && float.IsNaN(f)) continue;
+                values.Add(Convert.ToDouble(obj));
             }
         }
 
@@ -1045,7 +1144,7 @@ public class GroupedDataFrame
 
     private static double ComputeStd(List<double> values)
     {
-        if (values.Count <= 1) return 0;
+        if (values.Count <= 1) return double.NaN;
         double mean = values.Average();
         double sumSq = values.Sum(v => (v - mean) * (v - mean));
         return Math.Sqrt(sumSq / (values.Count - 1));
@@ -1053,7 +1152,7 @@ public class GroupedDataFrame
 
     private static double ComputeVar(List<double> values)
     {
-        if (values.Count <= 1) return 0;
+        if (values.Count <= 1) return double.NaN;
         double mean = values.Average();
         return values.Sum(v => (v - mean) * (v - mean)) / (values.Count - 1);
     }

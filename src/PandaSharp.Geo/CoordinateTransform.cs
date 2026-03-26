@@ -30,18 +30,22 @@ public static class CoordinateTransform
         var lats = new double[geo.Length];
         var lons = new double[geo.Length];
 
+        var srcLats = geo.Latitudes;
+        var srcLons = geo.Longitudes;
+
         for (int i = 0; i < geo.Length; i++)
         {
-            var point = geo[i];
+            double lat = srcLats[i];
+            double lon = srcLons[i];
             if (isGeographic)
             {
-                if (point.Latitude < -90 || point.Latitude > 90)
-                    throw new ArgumentOutOfRangeException($"Latitude at index {i} is {point.Latitude}, must be between -90 and 90.");
-                if (point.Longitude < -180 || point.Longitude > 180)
-                    throw new ArgumentOutOfRangeException($"Longitude at index {i} is {point.Longitude}, must be between -180 and 180.");
+                if (lat < -90 || lat > 90)
+                    throw new ArgumentOutOfRangeException($"Latitude at index {i} is {lat}, must be between -90 and 90.");
+                if (lon < -180 || lon > 180)
+                    throw new ArgumentOutOfRangeException($"Longitude at index {i} is {lon}, must be between -180 and 180.");
             }
             // ProjNet uses (x=lon, y=lat) order for geographic CRS
-            var projected = mt.Transform(new[] { point.Longitude, point.Latitude });
+            var projected = mt.Transform(new[] { lon, lat });
             lons[i] = projected[0];
             lats[i] = projected[1];
         }

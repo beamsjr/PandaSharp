@@ -65,14 +65,16 @@ public static class ColumnArithmetic
             throw new ArgumentException("Column lengths must match.");
         var ls = left.Buffer.Span;
         var rs = right.Buffer.Span;
-        // No null-free fast path for divide — need to check for zero
+        bool isFloatingPoint = typeof(T) == typeof(double) || typeof(T) == typeof(float);
         var result = new T?[left.Length];
         for (int i = 0; i < left.Length; i++)
         {
-            if (left.Nulls.IsNull(i) || right.Nulls.IsNull(i) || rs[i] == T.Zero)
+            if (left.Nulls.IsNull(i) || right.Nulls.IsNull(i))
                 result[i] = null;
+            else if (rs[i] == T.Zero && !isFloatingPoint)
+                result[i] = null; // integer division by zero → null
             else
-                result[i] = ls[i] / rs[i];
+                result[i] = ls[i] / rs[i]; // floating-point: IEEE 754 handles ±Inf/NaN
         }
         return Column<T>.FromNullable(left.Name, result);
     }
@@ -171,10 +173,17 @@ public static class ColumnArithmetic
     public static Column<double> AsDouble<T>(this Column<T> col) where T : struct, INumber<T>
     {
         var span = col.Buffer.Span;
-        var result = new double[col.Length];
+        if (col.NullCount == 0)
+        {
+            var result = new double[col.Length];
+            for (int i = 0; i < span.Length; i++)
+                result[i] = double.CreateChecked(span[i]);
+            return new Column<double>(col.Name, result);
+        }
+        var nullable = new double?[col.Length];
         for (int i = 0; i < span.Length; i++)
-            result[i] = double.CreateChecked(span[i]);
-        return new Column<double>(col.Name, result);
+            nullable[i] = col.Nulls.IsNull(i) ? null : double.CreateChecked(span[i]);
+        return Column<double>.FromNullable(col.Name, nullable);
     }
 
     // -- Mixed-type arithmetic (int + double, float + double, etc.) --

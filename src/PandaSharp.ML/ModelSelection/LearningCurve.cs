@@ -41,6 +41,8 @@ public static class LearningCurve
         int nSamples = X.Shape[0];
         if (nFolds < 2)
             throw new ArgumentOutOfRangeException(nameof(nFolds), "Must have at least 2 folds.");
+        if (nSamples < nFolds)
+            throw new ArgumentException($"Cannot have {nFolds} folds with only {nSamples} samples.", nameof(nFolds));
 
         // Generate shuffled indices
         var indices = Enumerable.Range(0, nSamples).ToArray();

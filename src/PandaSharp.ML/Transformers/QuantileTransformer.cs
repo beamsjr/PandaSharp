@@ -72,14 +72,21 @@ public class QuantileTransformer : ITransformer
             // Compute quantile edges: nQuantiles+1 evenly spaced quantile points
             int nEdges = Math.Min(_nQuantiles + 1, values.Count);
             var edges = new double[nEdges];
-            for (int q = 0; q < nEdges; q++)
+            if (nEdges == 1)
             {
-                double frac = (double)q / (nEdges - 1);
-                double idx = frac * (values.Count - 1);
-                int lo = (int)idx;
-                int hi = Math.Min(lo + 1, values.Count - 1);
-                double t = idx - lo;
-                edges[q] = values[lo] * (1 - t) + values[hi] * t;
+                edges[0] = values[0];
+            }
+            else
+            {
+                for (int q = 0; q < nEdges; q++)
+                {
+                    double frac = (double)q / (nEdges - 1);
+                    double idx = frac * (values.Count - 1);
+                    int lo = (int)idx;
+                    int hi = Math.Min(lo + 1, values.Count - 1);
+                    double t = idx - lo;
+                    edges[q] = values[lo] * (1 - t) + values[hi] * t;
+                }
             }
 
             _quantileEdges[name] = edges;

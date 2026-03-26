@@ -14,18 +14,30 @@ public static class ValueCountsExtensions
         {
             var (codes, uniques) = sc.GetDictCodes();
             var countArr = new int[uniques.Length];
-            for (int i = 0; i < codes.Length; i++) countArr[codes[i]]++;
+            int nullCount2 = 0;
+            for (int i = 0; i < codes.Length; i++)
+            {
+                if (codes[i] < 0) nullCount2++;
+                else countArr[codes[i]]++;
+            }
 
             // Sort by count descending
             var order = Enumerable.Range(0, uniques.Length).ToArray();
             Array.Sort(order, (a, b) => countArr[b].CompareTo(countArr[a]));
 
-            var sortedNames = new string?[uniques.Length];
-            var sortedCounts = new int[uniques.Length];
+            int totalEntries = uniques.Length + (nullCount2 > 0 ? 1 : 0);
+            var sortedNames = new string?[totalEntries];
+            var sortedCounts = new int[totalEntries];
             for (int i = 0; i < order.Length; i++)
             {
                 sortedNames[i] = uniques[order[i]];
                 sortedCounts[i] = countArr[order[i]];
+            }
+
+            if (nullCount2 > 0)
+            {
+                sortedNames[uniques.Length] = null;
+                sortedCounts[uniques.Length] = nullCount2;
             }
 
             return new DataFrame(

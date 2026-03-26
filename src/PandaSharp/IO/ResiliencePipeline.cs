@@ -79,6 +79,11 @@ public class ResiliencePipeline
                 // Re-check circuit after delay — another thread may have opened it
                 EnsureCircuitAllows();
             }
+            catch (OperationCanceledException)
+            {
+                // Cancellation is not a fault — do not count toward circuit breaker
+                throw;
+            }
             catch
             {
                 OnFailure();

@@ -25,7 +25,7 @@ public static class StoryBoardRenderer
         sb.AppendLine("<meta charset='utf-8'>");
         sb.AppendLine("<meta name='viewport' content='width=device-width, initial-scale=1'>");
         sb.AppendLine($"<title>{Escape(title ?? "PandaSharp Report")}</title>");
-        sb.AppendLine("<script src='https://cdn.plot.ly/plotly-2.35.2.min.js'></script>");
+        sb.AppendLine("<script src='https://cdn.jsdelivr.net/npm/d3@7'></script>");
         sb.AppendLine("<style>");
         sb.AppendLine(GetCss());
         sb.AppendLine("</style>");
@@ -68,12 +68,9 @@ public static class StoryBoardRenderer
 
             case ChartSection c:
                 var divId = $"story_chart_{_chartCounter++}";
-                // Apply dark theme to chart if needed
-                if (isDark && string.IsNullOrEmpty(c.Spec.Layout.Template))
-                    c.Spec.Layout.Template = "plotly_dark";
                 // Override layout to be responsive
                 c.Spec.Layout.Extra["responsive"] = true;
-                var fragment = HtmlRenderer.RenderFragment(c.Spec, divId);
+                var fragment = D3HtmlRenderer.RenderFragment(c.Spec, divId);
                 sb.AppendLine($"<div class='story-chart'>{fragment}</div>");
                 if (c.Caption is not null)
                     sb.AppendLine($"<p class='chart-caption'>{Escape(c.Caption)}</p>");
@@ -112,6 +109,12 @@ public static class StoryBoardRenderer
 
             case DividerSection:
                 sb.AppendLine("<hr class='story-divider'>");
+                break;
+
+            case RawHtmlSection raw:
+                sb.AppendLine($"<div class='story-chart'>{raw.Html}</div>");
+                if (raw.Caption is not null)
+                    sb.AppendLine($"<p class='chart-caption'>{Escape(raw.Caption)}</p>");
                 break;
 
             case RowSection r:

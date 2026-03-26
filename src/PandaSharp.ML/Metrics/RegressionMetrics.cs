@@ -66,7 +66,7 @@ public static class RegressionMetrics
             ssTot += diff * diff;
         }
 
-        return ssTot > 0 ? 1.0 - ssRes / ssTot : 0.0;
+        return ssTot > 0 ? 1.0 - ssRes / ssTot : (ssRes == 0 ? 1.0 : 0.0);
     }
 
     /// <summary>

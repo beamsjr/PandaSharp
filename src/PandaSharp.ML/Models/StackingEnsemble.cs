@@ -55,6 +55,10 @@ public class StackingEnsemble : IModel
         int nSamples = X.Shape[0];
         int nBaseModels = _baseModels.Length;
 
+        if (nSamples < _nFolds)
+            throw new ArgumentException(
+                $"Cannot have {_nFolds} folds with only {nSamples} samples.", nameof(X));
+
         // Generate shuffled indices
         var indices = Enumerable.Range(0, nSamples).ToArray();
         var rng = _seed.HasValue ? new Random(_seed.Value) : Random.Shared;
@@ -69,8 +73,10 @@ public class StackingEnsemble : IModel
 
         int foldSize = nSamples / _nFolds;
 
-        // Process folds in parallel
-        Parallel.For(0, _nFolds, fold =>
+        // Process folds sequentially to avoid data races on shared base model instances.
+        // IModel.Fit() returns `this` (mutates in place), so concurrent folds on the
+        // same model object would corrupt intermediate state.
+        for (int fold = 0; fold < _nFolds; fold++)
         {
             int valStart = fold * foldSize;
             int valEnd = fold == _nFolds - 1 ? nSamples : valStart + foldSize;
@@ -84,7 +90,6 @@ public class StackingEnsemble : IModel
 
             for (int m = 0; m < nBaseModels; m++)
             {
-                // Each fold needs its own model instance - fit the base model
                 var foldModel = _baseModels[m].Fit(xTrain, yTrain);
                 var preds = foldModel.Predict(xVal);
                 var predSpan = preds.Span;
@@ -95,7 +100,7 @@ public class StackingEnsemble : IModel
                     oofPredictions[sampleIdx * nBaseModels + m] = predSpan[i];
                 }
             }
-        });
+        }
 
         // Train meta-learner on out-of-fold predictions
         var metaX = new Tensor<double>(oofPredictions, nSamples, nBaseModels);

@@ -238,6 +238,99 @@ public class VizBuilder
         return this;
     }
 
+    // ===== New D3-only chart types =====
+
+    /// <summary>Correlation matrix heatmap with diverging color scale and value labels.</summary>
+    public VizBuilder CorrMatrix(params string[] columns)
+    {
+        var cols = columns.Length > 0 ? columns : _df.ColumnNames.Where(n => IsNumeric(_df[n].DataType)).ToArray();
+        int n = cols.Length;
+        var z = new double[n * n];
+        var means = new double[n];
+        var stds = new double[n];
+        int rows = _df.RowCount;
+
+        // Compute means and stds
+        for (int c = 0; c < n; c++)
+        {
+            var vals = GetDoubleValues(_df, cols[c]);
+            double sum = 0, sum2 = 0; int cnt = 0;
+            for (int i = 0; i < rows; i++)
+                if (double.IsFinite(vals[i])) { sum += vals[i]; sum2 += vals[i] * vals[i]; cnt++; }
+            means[c] = cnt > 0 ? sum / cnt : 0;
+            stds[c] = cnt > 1 ? Math.Sqrt((sum2 - sum * sum / cnt) / (cnt - 1)) : 1;
+        }
+
+        // Compute Pearson correlations
+        for (int i = 0; i < n; i++)
+        {
+            var xi = GetDoubleValues(_df, cols[i]);
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j) { z[i * n + j] = 1.0; continue; }
+                var xj = GetDoubleValues(_df, cols[j]);
+                double sum = 0; int cnt = 0;
+                for (int k = 0; k < rows; k++)
+                    if (double.IsFinite(xi[k]) && double.IsFinite(xj[k]))
+                    { sum += (xi[k] - means[i]) * (xj[k] - means[j]); cnt++; }
+                z[i * n + j] = cnt > 1 && stds[i] > 0 && stds[j] > 0
+                    ? sum / ((cnt - 1) * stds[i] * stds[j]) : 0;
+            }
+        }
+
+        _spec.Traces.Add(new TraceSpec
+        {
+            Type = "corrmatrix",
+            Z = z, ZRows = n, ZCols = n,
+            XLabels = cols, YLabels = cols,
+        });
+        return this;
+    }
+
+    /// <summary>Parallel coordinates plot for multi-dimensional comparison.</summary>
+    public VizBuilder ParallelCoordinates(params string[] columns)
+    {
+        var cols = columns.Length > 0 ? columns : _df.ColumnNames.Where(n => IsNumeric(_df[n].DataType)).Take(8).ToArray();
+
+        // Store each column as a separate trace-like structure
+        var trace = new TraceSpec { Type = "parallel" };
+        // Pack column data into Extra
+        var colData = new List<double[]>();
+        foreach (var col in cols)
+            colData.Add(GetDoubleValues(_df, col));
+        trace.Extra["columns"] = cols;
+        trace.Extra["columnData"] = colData;
+        _spec.Traces.Add(trace);
+        return this;
+    }
+
+    /// <summary>Treemap for hierarchical data.</summary>
+    public VizBuilder Treemap(string hierarchy, string value, string? color = null)
+    {
+        var trace = new TraceSpec { Type = "treemap" };
+        trace.Extra["hierarchy"] = GetStringValues(_df, hierarchy);
+        trace.Extra["values"] = GetDoubleValues(_df, value);
+        if (color is not null)
+            trace.Extra["colors"] = GetStringValues(_df, color);
+        _spec.Traces.Add(trace);
+        return this;
+    }
+
+    /// <summary>Network / force-directed graph from edge list columns.</summary>
+    public VizBuilder Network(string source, string target, string? weight = null)
+    {
+        var trace = new TraceSpec { Type = "network" };
+        trace.Extra["sources"] = GetStringValues(_df, source);
+        trace.Extra["targets"] = GetStringValues(_df, target);
+        if (weight is not null)
+            trace.Extra["weights"] = GetDoubleValues(_df, weight);
+        _spec.Traces.Add(trace);
+        return this;
+    }
+
+    private static bool IsNumeric(Type t) =>
+        t == typeof(int) || t == typeof(long) || t == typeof(double) || t == typeof(float);
+
     // ===== Animation =====
 
     /// <summary>
@@ -417,10 +510,10 @@ public class VizBuilder
     // ===== Export =====
 
     /// <summary>Generate self-contained HTML string.</summary>
-    public string ToHtmlString() => HtmlRenderer.Render(_spec);
+    public string ToHtmlString() => D3HtmlRenderer.Render(_spec);
 
     /// <summary>Generate embeddable HTML fragment (div + script).</summary>
-    public string ToHtmlFragment(string divId = "chart") => HtmlRenderer.RenderFragment(_spec, divId);
+    public string ToHtmlFragment(string divId = "chart") => D3HtmlRenderer.RenderFragment(_spec, divId);
 
     /// <summary>Write to an HTML file.</summary>
     public void ToHtml(string path) => File.WriteAllText(path, ToHtmlString());

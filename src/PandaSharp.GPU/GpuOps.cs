@@ -175,6 +175,10 @@ public sealed class GpuOps
     /// <summary>Compute sum, min, max in one GPU launch.</summary>
     public (double Sum, double Min, double Max) SumMinMax(double[] data)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Length == 0)
+            throw new ArgumentException("Cannot compute sum/min/max of an empty array.", nameof(data));
+
         int n = data.Length;
         using var dData = _acc.Allocate1D(data);
         using var dSum = _acc.Allocate1D<double>(1);
@@ -202,6 +206,10 @@ public sealed class GpuOps
     /// <summary>Compute variance: mean of squared differences from mean.</summary>
     public double Variance(double[] data, double mean)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Length == 0)
+            throw new ArgumentException("Cannot compute variance of an empty array.", nameof(data));
+
         int n = data.Length;
         using var dData = _acc.Allocate1D(data);
         using var dResult = _acc.Allocate1D<double>(1);
@@ -225,6 +233,9 @@ public sealed class GpuOps
     /// </summary>
     public double[] MatMul(double[] A, double[] B, int m, int k, int n)
     {
+        if (m == 0 || n == 0) return [];
+        if (k == 0) return new double[m * n]; // all zeros — no terms to sum
+
         var C = new double[m * n];
         using var dA = _acc.Allocate1D(A);
         using var dB = _acc.Allocate1D(B);
@@ -243,6 +254,9 @@ public sealed class GpuOps
     /// </summary>
     public double[] GramMatrix(double[] A, int n, int d)
     {
+        if (d == 0) return [];
+        if (n == 0) return new double[d * d]; // all zeros — no rows to multiply
+
         var C = new double[d * d];
         using var dA = _acc.Allocate1D(A);
         using var dC = _acc.Allocate1D<double>(d * d);
@@ -261,6 +275,8 @@ public sealed class GpuOps
     /// </summary>
     public double[] PairwiseDistances(double[] X, double[] Y, int nX, int nY, int d)
     {
+        if (nX == 0 || nY == 0) return [];
+
         var dist = new double[nX * nY];
         using var dX = _acc.Allocate1D(X);
         using var dY = _acc.Allocate1D(Y);

@@ -34,6 +34,27 @@ public class DataFrameDataLoader : IEnumerable<(Tensor<double> Features, Tensor<
     public DataFrameDataLoader(DataFrame df, string[] features, string label,
         int batchSize = 32, bool shuffle = true, int? seed = null)
     {
+        ArgumentNullException.ThrowIfNull(df);
+        ArgumentNullException.ThrowIfNull(features);
+        ArgumentNullException.ThrowIfNull(label);
+
+        // Validate that all feature and label columns exist and are numeric
+        foreach (var col in features)
+        {
+            if (!df.ColumnNames.Contains(col))
+                throw new ArgumentException($"Feature column '{col}' not found in DataFrame.");
+            if (!IsNumericOrBool(df[col].DataType))
+                throw new ArgumentException(
+                    $"Feature column '{col}' has non-numeric type '{df[col].DataType.Name}'. " +
+                    "DataLoader requires all feature columns to be numeric (int, long, double, float, bool, etc.).");
+        }
+        if (!df.ColumnNames.Contains(label))
+            throw new ArgumentException($"Label column '{label}' not found in DataFrame.");
+        if (!IsNumericOrBool(df[label].DataType))
+            throw new ArgumentException(
+                $"Label column '{label}' has non-numeric type '{df[label].DataType.Name}'. " +
+                "DataLoader requires the label column to be numeric.");
+
         _df = df;
         _featureColumns = features;
         _labelColumn = label;
@@ -102,6 +123,9 @@ public class DataFrameDataLoader : IEnumerable<(Tensor<double> Features, Tensor<
     }
 
     System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    private static bool IsNumericOrBool(Type type) =>
+        TypeHelpers.IsNumeric(type) || type == typeof(bool);
 }
 
 public static class DataLoaderExtensions

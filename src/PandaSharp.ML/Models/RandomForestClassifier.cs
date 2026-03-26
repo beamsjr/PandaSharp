@@ -50,6 +50,8 @@ public class RandomForestClassifier : IClassifier
         int minSamplesSplit = 2,
         int minSamplesLeaf = 1)
     {
+        if (nEstimators < 1)
+            throw new ArgumentOutOfRangeException(nameof(nEstimators), "nEstimators must be >= 1.");
         _nEstimators = nEstimators;
         _maxDepth = maxDepth;
         _maxFeatures = maxFeatures;

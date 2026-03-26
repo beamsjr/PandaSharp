@@ -80,7 +80,24 @@ public static class StationarityTests
         var xtxInv = ComputeXtXInverse(X, nObs, nParams);
         double seBeta = Math.Sqrt(sigma2 * xtxInv[1, 1]);
 
-        double testStat = seBeta > 1e-15 ? coeffs[1] / seBeta : 0;
+        // When seBeta is effectively zero (perfect fit), the test statistic should
+        // reflect that the coefficient beta is significantly different from zero.
+        // A negative beta with near-zero SE means strong evidence against unit root.
+        double testStat;
+        if (seBeta > 1e-15)
+        {
+            testStat = coeffs[1] / seBeta;
+        }
+        else if (Math.Abs(coeffs[1]) > 1e-15)
+        {
+            // Perfect fit: beta is nonzero with zero standard error.
+            // Return a large-magnitude statistic with the sign of beta.
+            testStat = coeffs[1] < 0 ? -1e6 : 1e6;
+        }
+        else
+        {
+            testStat = 0;
+        }
 
         // Approximate p-value using MacKinnon critical values (constant, no trend)
         var criticalValues = new Dictionary<string, double>
@@ -165,7 +182,10 @@ public static class StationarityTests
         double eta = 0;
         for (int i = 0; i < n; i++)
             eta += cumResiduals[i] * cumResiduals[i];
-        double stat = eta / (n * n * s2);
+
+        // When s2 is zero (constant series), the series is perfectly stationary.
+        // Return 0 for the test statistic (strongly fail to reject H0: stationary).
+        double stat = s2 > 1e-15 ? eta / (n * n * s2) : 0.0;
 
         // Critical values for constant case
         Dictionary<string, double> criticalValues;

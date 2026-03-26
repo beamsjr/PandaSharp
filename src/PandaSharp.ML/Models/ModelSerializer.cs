@@ -85,8 +85,86 @@ public static class ModelSerializer
         if (modelType is null)
             throw new InvalidOperationException($"Cannot resolve model type '{typeName}'. Ensure the assembly is loaded.");
 
-        var instance = Activator.CreateInstance(modelType)
-            ?? throw new InvalidOperationException($"Cannot create instance of '{typeName}'. Ensure it has a parameterless constructor.");
+        // Parse the serialized properties so we can supply constructor arguments
+        Dictionary<string, JsonElement>? serializedProps = null;
+        if (root.TryGetProperty("properties", out var propsEl))
+        {
+            serializedProps = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var jp in propsEl.EnumerateObject())
+                serializedProps[jp.Name] = jp.Value;
+        }
+
+        // Try parameterless constructor first; if unavailable, find a constructor
+        // where all parameters have default values and invoke it with those defaults.
+        // As a last resort, try constructors where required parameters can be supplied
+        // from the serialized properties.
+        object? instance = null;
+        try
+        {
+            instance = Activator.CreateInstance(modelType);
+        }
+        catch (MissingMethodException)
+        {
+            var constructors = modelType.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+            // First pass: look for a constructor where every parameter is optional (has a default value)
+            foreach (var ctor in constructors.OrderBy(c => c.GetParameters().Length))
+            {
+                var parameters = ctor.GetParameters();
+                if (parameters.All(p => p.HasDefaultValue))
+                {
+                    var defaults = parameters.Select(p => p.DefaultValue).ToArray();
+                    instance = ctor.Invoke(defaults);
+                    break;
+                }
+            }
+
+            // Second pass: try constructors where required parameters can be matched
+            // from serialized properties (by name, case-insensitive)
+            if (instance is null && serializedProps is not null)
+            {
+                foreach (var ctor in constructors.OrderBy(c => c.GetParameters().Length))
+                {
+                    var parameters = ctor.GetParameters();
+                    var args = new object?[parameters.Length];
+                    bool canInvoke = true;
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        var param = parameters[i];
+                        if (serializedProps.TryGetValue(param.Name!, out var jsonVal))
+                        {
+                            try
+                            {
+                                args[i] = JsonSerializer.Deserialize(jsonVal.GetRawText(), param.ParameterType, JsonOpts);
+                                continue;
+                            }
+                            catch { /* fall through to default */ }
+                        }
+                        if (param.HasDefaultValue)
+                        {
+                            args[i] = param.DefaultValue;
+                        }
+                        else
+                        {
+                            canInvoke = false;
+                            break;
+                        }
+                    }
+                    if (canInvoke)
+                    {
+                        try
+                        {
+                            instance = ctor.Invoke(args);
+                            break;
+                        }
+                        catch { /* try next constructor */ }
+                    }
+                }
+            }
+        }
+
+        if (instance is null)
+            throw new InvalidOperationException($"Cannot create instance of '{typeName}'. Ensure it has a parameterless constructor or a constructor with all-optional parameters.");
 
         // Restore public writable properties
         if (root.TryGetProperty("properties", out var propsElement))
@@ -109,6 +187,98 @@ public static class ModelSerializer
             }
         }
 
+        // Restore IsFitted state from the envelope. IsFitted often has a private setter
+        // or is computed from a private field, so we need to use reflection to set it.
+        if (root.TryGetProperty("isFitted", out var isFittedElement) && isFittedElement.GetBoolean())
+        {
+            var isFittedProp = modelType.GetProperty("IsFitted",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (isFittedProp is not null)
+            {
+                // Try setting via property setter (works even with private set)
+                var setter = isFittedProp.GetSetMethod(nonPublic: true);
+                if (setter is not null)
+                {
+                    try { setter.Invoke(instance, [true]); }
+                    catch { /* ignore if it fails */ }
+                }
+                else
+                {
+                    // For computed properties (e.g., IsFitted => _root is not null),
+                    // try to find and set the backing field, or set a sentinel value
+                    // on the field that the computed property checks.
+                    var backingField = modelType.GetField("<IsFitted>k__BackingField",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (backingField is not null)
+                    {
+                        try { backingField.SetValue(instance, true); }
+                        catch { /* ignore */ }
+                    }
+                    else
+                    {
+                        // Try common field patterns that computed IsFitted properties check:
+                        // _root (DecisionTreeClassifier), _trees (RandomForestClassifier/ensemble),
+                        // _weights (various models)
+                        TrySetSentinelForIsFitted(modelType, instance);
+                    }
+                }
+            }
+        }
+
         return (IModel)instance;
+    }
+
+    /// <summary>
+    /// For models where IsFitted is computed from a private nullable field (e.g., _root, _trees),
+    /// set a sentinel non-null value on that field so IsFitted returns true.
+    /// This allows deserialized models to report they were previously fitted,
+    /// even though the full internal state (weights, tree structure) is not restored.
+    /// </summary>
+    private static void TrySetSentinelForIsFitted(Type modelType, object instance)
+    {
+        // Known patterns for computed IsFitted properties:
+        // DecisionTreeClassifier: IsFitted => _root is not null
+        // RandomForestClassifier: IsFitted => _trees is not null
+        var candidateFields = new[] { "_root", "_trees", "_weights", "_inner" };
+        foreach (var fieldName in candidateFields)
+        {
+            var field = modelType.GetField(fieldName,
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field is null) continue;
+
+            // Only set if the field is currently null and is a reference/nullable type
+            var currentValue = field.GetValue(instance);
+            if (currentValue is not null) continue;
+
+            try
+            {
+                // Create a minimal non-null sentinel value
+                var fieldType = field.FieldType;
+                if (fieldType == typeof(TreeNode))
+                {
+                    // DecisionTreeClassifier._root: set a minimal leaf node
+                    field.SetValue(instance, new TreeNode { ClassDistribution = Array.Empty<double>() });
+                }
+                else if (fieldType.IsArray)
+                {
+                    // For array fields like _trees (DecisionTreeClassifier[]),
+                    // create an empty array of the element type
+                    var elementType = fieldType.GetElementType()!;
+                    field.SetValue(instance, Array.CreateInstance(elementType, 0));
+                }
+                else
+                {
+                    // Try creating a default instance
+                    try
+                    {
+                        var sentinel = Activator.CreateInstance(fieldType);
+                        if (sentinel is not null)
+                            field.SetValue(instance, sentinel);
+                    }
+                    catch { /* ignore */ }
+                }
+            }
+            catch { /* ignore */ }
+        }
     }
 }

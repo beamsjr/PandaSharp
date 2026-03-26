@@ -49,7 +49,17 @@ public static class GeoOps
         // 1 degree of latitude ≈ 111.32 km
         double latDeg = km / 111.32;
         // Longitude degrees shrink with cos(latitude)
-        double lonDeg = km / (111.32 * Math.Cos(atLatitude * DegToRad));
+        double cosLat = Math.Cos(atLatitude * DegToRad);
+        double lonDeg;
+        if (cosLat < 1e-10)
+        {
+            // At or very near the pole, longitude is meaningless — cap to full range
+            lonDeg = 360.0;
+        }
+        else
+        {
+            lonDeg = km / (111.32 * cosLat);
+        }
         return (latDeg, lonDeg);
     }
 

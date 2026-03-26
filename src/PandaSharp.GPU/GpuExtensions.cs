@@ -154,7 +154,7 @@ public static class GpuExtensions
                 data[i * k + c] = centered;
                 ss += centered * centered;
             }
-            stds[c] = Math.Sqrt(ss / (n - 1));
+            stds[c] = n > 1 ? Math.Sqrt(ss / (n - 1)) : double.NaN;
         }
 
         // GPU Gram matrix: X^T @ X
@@ -165,8 +165,15 @@ public static class GpuExtensions
         for (int i = 0; i < k; i++)
             for (int j = 0; j < k; j++)
             {
-                double denom = stds[i] * stds[j] * (n - 1);
-                corrMatrix[i * k + j] = denom > 0 ? gram[i * k + j] / denom : 0;
+                if (n <= 1 || double.IsNaN(stds[i]) || double.IsNaN(stds[j]))
+                {
+                    corrMatrix[i * k + j] = double.NaN;
+                }
+                else
+                {
+                    double denom = stds[i] * stds[j] * (n - 1);
+                    corrMatrix[i * k + j] = denom > 0 ? gram[i * k + j] / denom : 0;
+                }
             }
 
         // Build DataFrame

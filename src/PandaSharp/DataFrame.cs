@@ -281,6 +281,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
     /// <summary>Return the first n rows (default 5).</summary>
     public DataFrame Head(int count = 5)
     {
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count),
+                $"Head count must be non-negative, got {count}.");
         count = Math.Min(count, RowCount);
         var cols = new List<Column.IColumn>(_columns.Count);
         for (int i = 0; i < _columns.Count; i++)
@@ -291,6 +294,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
     /// <summary>Return the last n rows (default 5).</summary>
     public DataFrame Tail(int count = 5)
     {
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count),
+                $"Tail count must be non-negative, got {count}.");
         count = Math.Min(count, RowCount);
         int offset = RowCount - count;
         var cols = new List<Column.IColumn>(_columns.Count);
@@ -474,16 +480,17 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
         // Typed fast paths: use Array.Sort(keys, items) for cache-friendly sorting
         if (col is Column.Column<double> dc && dc.NullCount == 0)
-            SortByKeys(indices, dc.Buffer.Span, ascending);
+            SortByKeysNaNLast(indices, dc.Buffer.Span, ascending);
         else if (col is Column.Column<int> ic && ic.NullCount == 0)
             SortByKeys(indices, ic.Buffer.Span, ascending);
         else if (col is Column.Column<long> lc && lc.NullCount == 0)
             SortByKeys(indices, lc.Buffer.Span, ascending);
         else if (col is Column.Column<float> fc && fc.NullCount == 0)
-            SortByKeys(indices, fc.Buffer.Span, ascending);
-        else if (col is Column.StringColumn sc2)
+            SortByKeysNaNLastFloat(indices, fc.Buffer.Span, ascending);
+        else if (col is Column.StringColumn sc2 && sc2.NullCount == 0)
         {
             // Use dict codes with rank mapping for fast int comparison
+            // Only safe when no nulls (codes are all >= 0)
             var (codes, uniques) = sc2.GetDictCodes();
             var sortOrder = Enumerable.Range(0, uniques.Length).ToArray();
             Array.Sort(sortOrder, (a, b) => string.Compare(uniques[a], uniques[b], StringComparison.Ordinal));
@@ -499,11 +506,17 @@ public class DataFrame : IEnumerable<DataFrameRow>
             {
                 var va = col.GetObject(a);
                 var vb = col.GetObject(b);
-                if (va is null && vb is null) return 0;
-                if (va is null) return ascending ? 1 : -1;
-                if (vb is null) return ascending ? -1 : 1;
+                // Treat NaN as missing (same as null) — always sort last
+                bool aNaN = va is double da && double.IsNaN(da) || va is float fa && float.IsNaN(fa);
+                bool bNaN = vb is double db && double.IsNaN(db) || vb is float fb && float.IsNaN(fb);
+                bool aMissing = va is null || aNaN;
+                bool bMissing = vb is null || bNaN;
+                if (aMissing && bMissing) return a.CompareTo(b);
+                if (aMissing) return 1;  // missing always last
+                if (bMissing) return -1; // missing always last
                 int cmp = Comparer<object>.Default.Compare(va, vb);
-                return ascending ? cmp : -cmp;
+                int result = ascending ? cmp : -cmp;
+                return result != 0 ? result : a.CompareTo(b); // stable
             });
         }
 
@@ -518,31 +531,92 @@ public class DataFrame : IEnumerable<DataFrameRow>
     /// Sort indices by comparing values using a typed struct comparer.
     /// Handles ascending and descending correctly without a separate reverse pass.
     /// </summary>
-    private static void SortByKeys<T>(int[] indices, ReadOnlySpan<T> values, bool ascending)
+    private static void SortByKeys<T>(int[] indices, ReadOnlySpan<T> values, bool ascending, bool stable = true)
         where T : struct, IComparable<T>
     {
-        Array.Sort(indices, new SpanComparer<T>(values.ToArray(), ascending));
+        Array.Sort(indices, new SpanComparer<T>(values.ToArray(), ascending, stable));
+    }
+
+    /// <summary>Sort with NaN values always at the end (regardless of ascending/descending).</summary>
+    private static void SortByKeysNaNLast(int[] indices, ReadOnlySpan<double> values, bool ascending, bool stable = true)
+    {
+        Array.Sort(indices, new DoubleNaNLastComparer(values.ToArray(), ascending, stable));
+    }
+
+    /// <summary>Sort with NaN values always at the end (regardless of ascending/descending).</summary>
+    private static void SortByKeysNaNLastFloat(int[] indices, ReadOnlySpan<float> values, bool ascending, bool stable = true)
+    {
+        Array.Sort(indices, new FloatNaNLastComparer(values.ToArray(), ascending, stable));
+    }
+
+    private readonly struct DoubleNaNLastComparer : IComparer<int>
+    {
+        private readonly double[] _values;
+        private readonly bool _ascending;
+        private readonly bool _stable;
+        public DoubleNaNLastComparer(double[] values, bool ascending, bool stable = true)
+        { _values = values; _ascending = ascending; _stable = stable; }
+        public int Compare(int a, int b)
+        {
+            double va = _values[a], vb = _values[b];
+            bool nanA = double.IsNaN(va), nanB = double.IsNaN(vb);
+            if (nanA && nanB) return _stable ? a.CompareTo(b) : 0;
+            if (nanA) return 1;  // NaN always last
+            if (nanB) return -1; // NaN always last
+            int cmp = va.CompareTo(vb);
+            int result = _ascending ? cmp : -cmp;
+            return result != 0 ? result : (_stable ? a.CompareTo(b) : 0);
+        }
+    }
+
+    private readonly struct FloatNaNLastComparer : IComparer<int>
+    {
+        private readonly float[] _values;
+        private readonly bool _ascending;
+        private readonly bool _stable;
+        public FloatNaNLastComparer(float[] values, bool ascending, bool stable = true)
+        { _values = values; _ascending = ascending; _stable = stable; }
+        public int Compare(int a, int b)
+        {
+            float va = _values[a], vb = _values[b];
+            bool nanA = float.IsNaN(va), nanB = float.IsNaN(vb);
+            if (nanA && nanB) return _stable ? a.CompareTo(b) : 0;
+            if (nanA) return 1;  // NaN always last
+            if (nanB) return -1; // NaN always last
+            int cmp = va.CompareTo(vb);
+            int result = _ascending ? cmp : -cmp;
+            return result != 0 ? result : (_stable ? a.CompareTo(b) : 0);
+        }
     }
 
     private readonly struct SpanComparer<T> : IComparer<int> where T : struct, IComparable<T>
     {
         private readonly T[] _values;
         private readonly bool _ascending;
-        public SpanComparer(T[] values, bool ascending) { _values = values; _ascending = ascending; }
-        public int Compare(int a, int b) => _ascending
-            ? _values[a].CompareTo(_values[b])
-            : _values[b].CompareTo(_values[a]);
+        private readonly bool _stable;
+        public SpanComparer(T[] values, bool ascending, bool stable = true)
+        { _values = values; _ascending = ascending; _stable = stable; }
+        public int Compare(int a, int b)
+        {
+            int cmp = _ascending
+                ? _values[a].CompareTo(_values[b])
+                : _values[b].CompareTo(_values[a]);
+            return cmp != 0 ? cmp : (_stable ? a.CompareTo(b) : 0);
+        }
     }
 
     private readonly struct StringArrayComparer : IComparer<int>
     {
         private readonly string?[] _values;
         private readonly bool _ascending;
-        public StringArrayComparer(string?[] values, bool ascending) { _values = values; _ascending = ascending; }
+        private readonly bool _stable;
+        public StringArrayComparer(string?[] values, bool ascending, bool stable = true)
+        { _values = values; _ascending = ascending; _stable = stable; }
         public int Compare(int a, int b)
         {
             int cmp = string.Compare(_values[a], _values[b], StringComparison.Ordinal);
-            return _ascending ? cmp : -cmp;
+            int result = _ascending ? cmp : -cmp;
+            return result != 0 ? result : (_stable ? a.CompareTo(b) : 0);
         }
     }
 
@@ -550,16 +624,22 @@ public class DataFrame : IEnumerable<DataFrameRow>
     {
         private readonly Column.IColumn _col;
         private readonly bool _ascending;
-        public BoxingComparer(Column.IColumn col, bool ascending) { _col = col; _ascending = ascending; }
+        private readonly bool _stable;
+        public BoxingComparer(Column.IColumn col, bool ascending, bool stable = true)
+        { _col = col; _ascending = ascending; _stable = stable; }
+        private static bool IsMissing(object? v) =>
+            v is null || v is double d && double.IsNaN(d) || v is float f && float.IsNaN(f);
         public int Compare(int a, int b)
         {
             var va = _col.GetObject(a);
             var vb = _col.GetObject(b);
-            if (va is null && vb is null) return 0;
-            if (va is null) return _ascending ? 1 : -1;
-            if (vb is null) return _ascending ? -1 : 1;
+            bool aMissing = IsMissing(va), bMissing = IsMissing(vb);
+            if (aMissing && bMissing) return _stable ? a.CompareTo(b) : 0;
+            if (aMissing) return 1;  // missing always last
+            if (bMissing) return -1; // missing always last
             int cmp = Comparer<object>.Default.Compare(va, vb);
-            return _ascending ? cmp : -cmp;
+            int result = _ascending ? cmp : -cmp;
+            return result != 0 ? result : (_stable ? a.CompareTo(b) : 0);
         }
     }
 
@@ -574,7 +654,7 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 int cmp = _comparers[k].Compare(a, b);
                 if (cmp != 0) return cmp;
             }
-            return 0;
+            return a.CompareTo(b); // stable: preserve original order for ties
         }
     }
 
@@ -594,17 +674,19 @@ public class DataFrame : IEnumerable<DataFrameRow>
             var col = cols[k];
             bool asc = keys[k].Ascending;
 
+            // Use stable: false for individual comparers — ChainedComparer handles stability
             if (col is Column.Column<double> dc && dc.NullCount == 0)
-                comparers[k] = new SpanComparer<double>(dc.Buffer.Span.ToArray(), asc);
+                comparers[k] = new DoubleNaNLastComparer(dc.Buffer.Span.ToArray(), asc, stable: false);
             else if (col is Column.Column<int> ic && ic.NullCount == 0)
-                comparers[k] = new SpanComparer<int>(ic.Buffer.Span.ToArray(), asc);
+                comparers[k] = new SpanComparer<int>(ic.Buffer.Span.ToArray(), asc, stable: false);
             else if (col is Column.Column<long> lc && lc.NullCount == 0)
-                comparers[k] = new SpanComparer<long>(lc.Buffer.Span.ToArray(), asc);
+                comparers[k] = new SpanComparer<long>(lc.Buffer.Span.ToArray(), asc, stable: false);
             else if (col is Column.Column<float> fc && fc.NullCount == 0)
-                comparers[k] = new SpanComparer<float>(fc.Buffer.Span.ToArray(), asc);
-            else if (col is Column.StringColumn sc)
+                comparers[k] = new FloatNaNLastComparer(fc.Buffer.Span.ToArray(), asc, stable: false);
+            else if (col is Column.StringColumn sc && sc.NullCount == 0)
             {
                 // Use dict codes with sorted rank mapping for fast integer comparison
+                // Only safe when no nulls (codes are all >= 0)
                 var (codes, uniques) = sc.GetDictCodes();
                 // Build rank map: sort uniques alphabetically, map each code to its rank
                 var sortOrder = Enumerable.Range(0, uniques.Length).ToArray();
@@ -614,7 +696,7 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 // Map codes to ranks
                 var rankedCodes = new int[codes.Length];
                 for (int i = 0; i < codes.Length; i++) rankedCodes[i] = rank[codes[i]];
-                comparers[k] = new SpanComparer<int>(rankedCodes, asc);
+                comparers[k] = new SpanComparer<int>(rankedCodes, asc, stable: false);
             }
             else
                 comparers[k] = new BoxingComparer(col, asc);
@@ -952,6 +1034,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     public DataFrame DropColumn(string name)
     {
+        if (!_columnIndex.ContainsKey(name))
+            throw new KeyNotFoundException(
+                $"Cannot drop: column '{name}' not found. Available columns: [{string.Join(", ", ColumnNames.Select(c => $"'{c}'"))}]");
         return new DataFrame(_columns.Where(c => c.Name != name));
     }
 
@@ -960,6 +1045,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
         if (!_columnIndex.ContainsKey(oldName))
             throw new KeyNotFoundException(
                 $"Cannot rename: column '{oldName}' not found. Available columns: [{string.Join(", ", ColumnNames.Select(c => $"'{c}'"))}]");
+        if (oldName != newName && _columnIndex.ContainsKey(newName))
+            throw new ArgumentException(
+                $"Cannot rename '{oldName}' to '{newName}': column '{newName}' already exists.");
         return new DataFrame(_columns.Select(c =>
             c.Name == oldName ? c.RenameOrKeep(newName) : c));
     }
@@ -1059,11 +1147,12 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
         if (cols.Length == 1)
         {
-            // Single string column: direct HashSet<string>
+            // Single string column: use a sentinel to distinguish null from ""
+            const string nullSentinel = "\0__NULL__\0";
             var seen = new HashSet<string>(RowCount / 4, StringComparer.Ordinal);
             var vals = cols[0].GetValues();
             for (int r = 0; r < RowCount; r++)
-                keepMask[r] = seen.Add(vals[r] ?? "");
+                keepMask[r] = seen.Add(vals[r] ?? nullSentinel);
         }
         else if (cols.Length == 2)
         {
@@ -1093,17 +1182,21 @@ public class DataFrame : IEnumerable<DataFrameRow>
             }
             var codes1 = dict1.Codes;
             var codes2 = dict2.Codes;
-            int nUniques1 = dict1.Uniques.Length;
-            int nUniques2 = dict2.Uniques.Length;
+            // Remap null sentinel (-1) to a valid index: nUniques (one past the last unique)
+            int nSlots1 = dict1.Uniques.Length + 1; // +1 for null slot
+            int nSlots2 = dict2.Uniques.Length + 1; // +1 for null slot
 
             // If composite key space fits in a flat boolean array, use it
-            long keySpace = (long)nUniques1 * nUniques2;
+            long keySpace = (long)nSlots1 * nSlots2;
             if (keySpace <= 100_000_000)
             {
                 var seen = new bool[keySpace];
                 for (int r = 0; r < RowCount; r++)
                 {
-                    int key = codes1[r] * nUniques2 + codes2[r];
+                    // Map -1 (null) to nUniques so all codes are >= 0
+                    int c1 = codes1[r] < 0 ? dict1.Uniques.Length : codes1[r];
+                    int c2 = codes2[r] < 0 ? dict2.Uniques.Length : codes2[r];
+                    int key = c1 * nSlots2 + c2;
                     if (seen[key]) { keepMask[r] = false; }
                     else { seen[key] = true; keepMask[r] = true; }
                 }
@@ -1113,7 +1206,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
                 var seen = new HashSet<long>(Math.Min(RowCount, (int)Math.Min(keySpace, int.MaxValue)));
                 for (int r = 0; r < RowCount; r++)
                 {
-                    long key = (long)codes1[r] * nUniques2 + codes2[r];
+                    int c1 = codes1[r] < 0 ? dict1.Uniques.Length : codes1[r];
+                    int c2 = codes2[r] < 0 ? dict2.Uniques.Length : codes2[r];
+                    long key = (long)c1 * nSlots2 + c2;
                     keepMask[r] = seen.Add(key);
                 }
             }
@@ -1167,12 +1262,28 @@ public class DataFrame : IEnumerable<DataFrameRow>
             if (col is Column.Column<double> dc)
             {
                 var arr = dc.Buffer.Span.ToArray();
-                comparers[c] = (a, b) => arr[a] == arr[b];
+                var nulls = dc.Nulls;
+                // NaN == NaN should be true for DropDuplicates (pandas semantics)
+                // Must also check null bitmask: null != 0.0
+                comparers[c] = (a, b) =>
+                {
+                    bool aNul = nulls.IsNull(a), bNul = nulls.IsNull(b);
+                    if (aNul && bNul) return true;
+                    if (aNul || bNul) return false;
+                    return arr[a] == arr[b] || (double.IsNaN(arr[a]) && double.IsNaN(arr[b]));
+                };
             }
             else if (col is Column.Column<int> ic)
             {
                 var arr = ic.Buffer.Span.ToArray();
-                comparers[c] = (a, b) => arr[a] == arr[b];
+                var nulls = ic.Nulls;
+                comparers[c] = (a, b) =>
+                {
+                    bool aNul = nulls.IsNull(a), bNul = nulls.IsNull(b);
+                    if (aNul && bNul) return true;
+                    if (aNul || bNul) return false;
+                    return arr[a] == arr[b];
+                };
             }
             else if (col is Column.StringColumn sc)
             {
@@ -1191,6 +1302,9 @@ public class DataFrame : IEnumerable<DataFrameRow>
 
     private static TypedHasher[] BuildTypedHashers(Column.IColumn[] cols)
     {
+        // Sentinel hash value for null — must differ from any real value's hash
+        const int NullSentinelHash = int.MinValue + 7;
+
         var hashers = new TypedHasher[cols.Length];
         for (int c = 0; c < cols.Length; c++)
         {
@@ -1198,17 +1312,32 @@ public class DataFrame : IEnumerable<DataFrameRow>
             if (col is Column.Column<double> dc)
             {
                 var span = dc.Buffer.Span.ToArray();
-                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+                var nulls = dc.Nulls;
+                hashers[c] = (int r, ref HashCode h) =>
+                {
+                    if (nulls.IsNull(r)) h.Add(NullSentinelHash);
+                    else h.Add(span[r]);
+                };
             }
             else if (col is Column.Column<int> ic)
             {
                 var span = ic.Buffer.Span.ToArray();
-                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+                var nulls = ic.Nulls;
+                hashers[c] = (int r, ref HashCode h) =>
+                {
+                    if (nulls.IsNull(r)) h.Add(NullSentinelHash);
+                    else h.Add(span[r]);
+                };
             }
             else if (col is Column.Column<long> lc)
             {
                 var span = lc.Buffer.Span.ToArray();
-                hashers[c] = (int r, ref HashCode h) => h.Add(span[r]);
+                var nulls = lc.Nulls;
+                hashers[c] = (int r, ref HashCode h) =>
+                {
+                    if (nulls.IsNull(r)) h.Add(NullSentinelHash);
+                    else h.Add(span[r]);
+                };
             }
             else if (col is Column.StringColumn sc)
             {
@@ -1217,7 +1346,7 @@ public class DataFrame : IEnumerable<DataFrameRow>
             }
             else
             {
-                // Fallback: boxing
+                // Fallback: boxing (GetObject returns null for null bitmask entries)
                 hashers[c] = (int r, ref HashCode h) => h.Add(col.GetObject(r));
             }
         }
@@ -1515,6 +1644,8 @@ public class DataFrame : IEnumerable<DataFrameRow>
     /// </summary>
     public DataFrame Clip(double lower, double upper)
     {
+        if (lower > upper)
+            throw new ArgumentException($"lower ({lower}) must be less than or equal to upper ({upper}).");
         var cols = new List<Column.IColumn>();
         foreach (var col in _columns)
         {

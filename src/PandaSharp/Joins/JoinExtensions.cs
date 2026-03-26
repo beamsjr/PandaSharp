@@ -330,12 +330,19 @@ public static class JoinExtensions
         StringColumn leftKey, StringColumn rightKey,
         string leftSuffix, string rightSuffix)
     {
-        // Build hash table on right side
+        // Build hash table on right side — null keys are tracked separately
         var rightVals = rightKey.GetValues();
         var rightMap = new Dictionary<string, List<int>>(right.RowCount / 2, StringComparer.Ordinal);
+        List<int>? rightNullIndices = null;
         for (int i = 0; i < right.RowCount; i++)
         {
-            var key = rightVals[i] ?? "";
+            var key = rightVals[i];
+            if (key is null)
+            {
+                rightNullIndices ??= new List<int>();
+                rightNullIndices.Add(i);
+                continue;
+            }
             if (!rightMap.TryGetValue(key, out var list))
             {
                 list = new List<int>();
@@ -344,13 +351,26 @@ public static class JoinExtensions
             list.Add(i);
         }
 
-        // Probe left side
+        // Probe left side — null keys match only null keys
         var leftVals = leftKey.GetValues();
         var leftIndices = new List<int>(left.RowCount);
         var rightIndices = new List<int>(left.RowCount);
         for (int l = 0; l < left.RowCount; l++)
         {
-            if (rightMap.TryGetValue(leftVals[l] ?? "", out var matches))
+            var key = leftVals[l];
+            if (key is null)
+            {
+                if (rightNullIndices is not null)
+                {
+                    foreach (var r in rightNullIndices)
+                    {
+                        leftIndices.Add(l);
+                        rightIndices.Add(r);
+                    }
+                }
+                continue;
+            }
+            if (rightMap.TryGetValue(key, out var matches))
             {
                 foreach (var r in matches)
                 {
@@ -416,10 +436,11 @@ public static class JoinExtensions
         int resultRows = leftIndices.Count;
         var columns = new List<IColumn>();
 
-        // Determine overlapping column names (excluding join keys)
+        // Determine overlapping column names: any left column name that also appears
+        // in right non-key columns (includes left key columns to avoid collisions)
         var rightNonKey = right.ColumnNames.Where(c => !rightKeyCols.Contains(c)).ToHashSet();
-        var leftNonKey = left.ColumnNames.Where(c => !leftKeyCols.Contains(c)).ToHashSet();
-        var overlap = leftNonKey.Intersect(rightNonKey).ToHashSet();
+        var leftNames = new HashSet<string>(left.ColumnNames);
+        var overlap = leftNames.Where(n => rightNonKey.Contains(n)).ToHashSet();
 
         // Check if we have any null indices (right/outer joins produce -1 on left side)
         bool hasNullLeft = leftIndices.Any(i => i < 0);
@@ -533,17 +554,27 @@ public static class JoinExtensions
     {
         private readonly object?[] _values;
         private readonly int _hash;
+        private readonly bool _hasNaN;
 
         public JoinKey(object?[] values)
         {
             _values = values;
+            _hasNaN = false;
             var h = new HashCode();
-            foreach (var v in values) h.Add(v);
+            foreach (var v in values)
+            {
+                h.Add(v);
+                // IEEE 754: NaN != NaN, so keys containing NaN should never match
+                if (v is double d && double.IsNaN(d)) _hasNaN = true;
+                else if (v is float f && float.IsNaN(f)) _hasNaN = true;
+            }
             _hash = h.ToHashCode();
         }
 
         public bool Equals(JoinKey other)
         {
+            // NaN keys never match anything (IEEE 754 semantics)
+            if (_hasNaN || other._hasNaN) return false;
             if (_values.Length != other._values.Length) return false;
             for (int i = 0; i < _values.Length; i++)
                 if (!Equals(_values[i], other._values[i])) return false;

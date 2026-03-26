@@ -14,7 +14,7 @@ public static class VizNotebookExtensions
     {
         // Return just the fragment — notebooks handle the Plotly CDN via RequireJS
         return $"""
-        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
         {viz.ToHtmlFragment($"viz_{Guid.NewGuid():N}")}
         """;
     }
@@ -31,7 +31,7 @@ public static class VizNotebookExtensions
         if (bodyStart > 6 && bodyEnd > bodyStart)
         {
             return $"""
-            <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
             {full[bodyStart..bodyEnd]}
             """;
         }

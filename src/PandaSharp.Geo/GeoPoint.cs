@@ -3,8 +3,35 @@ namespace PandaSharp.Geo;
 /// <summary>
 /// A 2D geographic point with latitude and longitude.
 /// </summary>
-public readonly record struct GeoPoint(double Latitude, double Longitude)
+public readonly record struct GeoPoint
 {
+    public double Latitude { get; }
+    public double Longitude { get; }
+
+    public GeoPoint(double Latitude, double Longitude)
+    {
+        if (Latitude < -90 || Latitude > 90)
+            throw new ArgumentOutOfRangeException(nameof(Latitude), Latitude, "Latitude must be between -90 and 90.");
+        if (Longitude < -180 || Longitude > 180)
+            throw new ArgumentOutOfRangeException(nameof(Longitude), Longitude, "Longitude must be between -180 and 180.");
+        this.Latitude = Latitude;
+        this.Longitude = Longitude;
+    }
+
+    // Private constructor that skips validation, used for projected coordinates
+    private GeoPoint(double latitude, double longitude, bool skipValidation)
+    {
+        Latitude = latitude;
+        Longitude = longitude;
+    }
+
+    /// <summary>
+    /// Creates a GeoPoint from projected coordinates without geographic bounds validation.
+    /// Use this for coordinates in projected CRS (e.g., Web Mercator meters, UTM).
+    /// </summary>
+    internal static GeoPoint FromProjected(double latitude, double longitude)
+        => new(latitude, longitude, skipValidation: true);
+
     public override string ToString() => $"({Latitude:F6}, {Longitude:F6})";
 }
 

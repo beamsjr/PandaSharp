@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PandaSharp.ML.Tests" />
+    <InternalsVisibleTo Include="PandaSharp.Viz" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,17 +1,46 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using PandaSharp.Column;
 
 namespace PandaSharp.Missing;
 
 public static class MissingDataExtensions
 {
+    /// <summary>
+    /// Check if a value is effectively missing: null in bitmask OR NaN for double/float.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsEffectivelyMissing<T>(Column<T> col, int index) where T : struct
+    {
+        if (col.IsNull(index)) return true;
+        if (typeof(T) == typeof(double))
+            return double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in col.Buffer.Span[index])));
+        if (typeof(T) == typeof(float))
+            return float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in col.Buffer.Span[index])));
+        return false;
+    }
+
+    /// <summary>
+    /// Check if a value in an IColumn is missing: null in bitmask OR NaN for floating-point columns.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsEffectivelyMissing(IColumn column, int index)
+    {
+        if (column.IsNull(index)) return true;
+        if (column is Column<double> dc)
+            return double.IsNaN(dc.Buffer.Span[index]);
+        if (column is Column<float> fc)
+            return float.IsNaN(fc.Buffer.Span[index]);
+        return false;
+    }
+
     // -- Column-level operations --
 
     public static bool[] IsNa(this IColumn column)
     {
         var result = new bool[column.Length];
         for (int i = 0; i < column.Length; i++)
-            result[i] = column.IsNull(i);
+            result[i] = IsEffectivelyMissing(column, i);
         return result;
     }
 
@@ -19,15 +48,40 @@ public static class MissingDataExtensions
     {
         var result = new bool[column.Length];
         for (int i = 0; i < column.Length; i++)
-            result[i] = !column.IsNull(i);
+            result[i] = !IsEffectivelyMissing(column, i);
         return result;
     }
 
     public static Column<T> FillNa<T>(this Column<T> column, T value) where T : struct
     {
+        // Fast path: if no nulls and no NaN, nothing to fill
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        bool hasNaN = false;
+        if (isFloating && column.NullCount == 0)
+        {
+            var checkSpan = column.Buffer.Span;
+            for (int i = 0; i < checkSpan.Length; i++)
+            {
+                if (typeof(T) == typeof(double) && double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in checkSpan[i]))))
+                { hasNaN = true; break; }
+                if (typeof(T) == typeof(float) && float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in checkSpan[i]))))
+                { hasNaN = true; break; }
+            }
+            if (!hasNaN) return column; // nothing to fill
+        }
+
         var values = new T?[column.Length];
-        for (int i = 0; i < column.Length; i++)
-            values[i] = column.IsNull(i) ? value : column[i];
+        if (!isFloating || (!hasNaN && column.NullCount > 0))
+        {
+            // No NaN possible or confirmed: use simpler IsNull check
+            for (int i = 0; i < column.Length; i++)
+                values[i] = column.IsNull(i) ? value : column[i];
+        }
+        else
+        {
+            for (int i = 0; i < column.Length; i++)
+                values[i] = IsEffectivelyMissing(column, i) ? value : column[i];
+        }
         return Column<T>.FromNullable(column.Name, values);
     }
 
@@ -79,26 +133,54 @@ public static class MissingDataExtensions
         return new StringColumn(column.Name, values);
     }
 
+    /// <summary>
+    /// Quick check if a floating-point column has any NaN values in its buffer.
+    /// </summary>
+    private static bool ColumnHasNaN<T>(Column<T> column) where T : struct
+    {
+        if (typeof(T) == typeof(double))
+        {
+            var span = column.Buffer.Span;
+            for (int i = 0; i < span.Length; i++)
+                if (double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in span[i]))))
+                    return true;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var span = column.Buffer.Span;
+            for (int i = 0; i < span.Length; i++)
+                if (float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in span[i]))))
+                    return true;
+        }
+        return false;
+    }
+
     private static Column<T> FillForward<T>(Column<T> column) where T : struct
     {
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        bool useSimple = !isFloating || !ColumnHasNaN(column);
         var values = new T?[column.Length];
         T? last = null;
         for (int i = 0; i < column.Length; i++)
         {
-            if (!column.IsNull(i)) last = column[i];
-            values[i] = column.IsNull(i) ? last : column[i];
+            bool missing = useSimple ? column.IsNull(i) : IsEffectivelyMissing(column, i);
+            if (!missing) last = column[i];
+            values[i] = missing ? last : column[i];
         }
         return Column<T>.FromNullable(column.Name, values);
     }
 
     private static Column<T> FillBackward<T>(Column<T> column) where T : struct
     {
+        bool isFloating = typeof(T) == typeof(double) || typeof(T) == typeof(float);
+        bool useSimple = !isFloating || !ColumnHasNaN(column);
         var values = new T?[column.Length];
         T? next = null;
         for (int i = column.Length - 1; i >= 0; i--)
         {
-            if (!column.IsNull(i)) next = column[i];
-            values[i] = column.IsNull(i) ? next : column[i];
+            bool missing = useSimple ? column.IsNull(i) : IsEffectivelyMissing(column, i);
+            if (!missing) next = column[i];
+            values[i] = missing ? next : column[i];
         }
         return Column<T>.FromNullable(column.Name, values);
     }
@@ -109,13 +191,13 @@ public static class MissingDataExtensions
     {
         if (axis == 0)
         {
-            // Drop rows with any nulls (or more than threshold nulls)
+            // Drop rows with any nulls/NaN (or more than threshold nulls/NaN)
             var mask = new bool[df.RowCount];
             for (int r = 0; r < df.RowCount; r++)
             {
                 int nullCount = 0;
                 for (int c = 0; c < df.ColumnCount; c++)
-                    if (df[df.ColumnNames[c]].IsNull(r)) nullCount++;
+                    if (IsEffectivelyMissing(df[df.ColumnNames[c]], r)) nullCount++;
 
                 if (threshold.HasValue)
                     mask[r] = (df.ColumnCount - nullCount) >= threshold.Value;
@@ -126,19 +208,23 @@ public static class MissingDataExtensions
         }
         else
         {
-            // Drop columns with any nulls
+            // Drop columns with any nulls/NaN
             var cols = new List<IColumn>();
             foreach (var name in df.ColumnNames)
             {
                 var col = df[name];
+                int missingCount = 0;
+                for (int i = 0; i < col.Length; i++)
+                    if (IsEffectivelyMissing(col, i)) missingCount++;
+
                 if (threshold.HasValue)
                 {
-                    if ((col.Length - col.NullCount) >= threshold.Value)
+                    if ((col.Length - missingCount) >= threshold.Value)
                         cols.Add(col);
                 }
                 else
                 {
-                    if (col.NullCount == 0)
+                    if (missingCount == 0)
                         cols.Add(col);
                 }
             }
@@ -150,8 +236,16 @@ public static class MissingDataExtensions
 
     public static Column<double> Interpolate(this Column<double> column, InterpolationMethod method = InterpolationMethod.Linear)
     {
+        // Check for NaN values in addition to null bitmask
+        bool hasNaN = false;
         if (column.NullCount == 0)
-            return column; // nothing to interpolate
+        {
+            var checkSpan = column.Buffer.Span;
+            for (int i = 0; i < checkSpan.Length; i++)
+                if (double.IsNaN(checkSpan[i])) { hasNaN = true; break; }
+            if (!hasNaN)
+                return column; // nothing to interpolate
+        }
 
         return method switch
         {
@@ -169,30 +263,34 @@ public static class MissingDataExtensions
     {
         int n = column.Length;
         var span = column.Buffer.Span;
-        var result = new double[n];
-        span.CopyTo(result);
+        var result = new double?[n];
+
+        // Copy non-null, non-NaN values
+        for (int i = 0; i < n; i++)
+            result[i] = (column.Nulls.IsNull(i) || double.IsNaN(span[i])) ? null : span[i];
 
         for (int i = 0; i < n; i++)
         {
-            if (!column.Nulls.IsNull(i)) continue;
+            if (result[i].HasValue) continue;
 
             int prev = -1;
             for (int j = i - 1; j >= 0; j--)
-                if (!column.Nulls.IsNull(j)) { prev = j; break; }
+                if (result[j].HasValue) { prev = j; break; }
 
             int next = -1;
             for (int j = i + 1; j < n; j++)
-                if (!column.Nulls.IsNull(j)) { next = j; break; }
+                if (result[j].HasValue) { next = j; break; }
 
             if (prev >= 0 && next >= 0)
-                result[i] = result[prev] + (double)(i - prev) / (next - prev) * (result[next] - result[prev]);
+                result[i] = result[prev]!.Value + (double)(i - prev) / (next - prev) * (result[next]!.Value - result[prev]!.Value);
             else if (prev >= 0)
-                result[i] = result[prev];
+                result[i] = result[prev]!.Value;
             else if (next >= 0)
-                result[i] = result[next];
+                result[i] = result[next]!.Value;
+            // else: no known values at all — leave as null
         }
 
-        return new Column<double>(column.Name, result);
+        return Column<double>.FromNullable(column.Name, result);
     }
 
     /// <summary>
@@ -203,34 +301,39 @@ public static class MissingDataExtensions
     {
         int n = column.Length;
         var span = column.Buffer.Span;
-        var result = new double[n];
-        span.CopyTo(result);
+        var result = new double?[n];
 
-        // Collect known (index, value) pairs
+        // Collect known (index, value) pairs — skip both null and NaN
         var known = new List<(int Idx, double Val)>();
         for (int i = 0; i < n; i++)
-            if (!column.Nulls.IsNull(i))
+        {
+            if (!column.Nulls.IsNull(i) && !double.IsNaN(span[i]))
+            {
                 known.Add((i, span[i]));
+                result[i] = span[i];
+            }
+        }
 
         if (known.Count < 2)
         {
-            // Not enough points — fill with the single known value
+            // Not enough points — fill with the single known value if available
             if (known.Count == 1)
                 for (int i = 0; i < n; i++)
                     result[i] = known[0].Val;
-            return new Column<double>(column.Name, result);
+            // else: all null — leave as null
+            return Column<double>.FromNullable(column.Name, result);
         }
 
         for (int i = 0; i < n; i++)
         {
-            if (!column.Nulls.IsNull(i)) continue;
+            if (result[i].HasValue) continue;
 
             // Find the 3 closest known points (or fewer if not available)
             var nearest = GetNearestKnown(known, i, 3);
             result[i] = NevilleInterpolate(nearest, i);
         }
 
-        return new Column<double>(column.Name, result);
+        return Column<double>.FromNullable(column.Name, result);
     }
 
     /// <summary>
@@ -241,18 +344,18 @@ public static class MissingDataExtensions
     {
         int n = column.Length;
         var span = column.Buffer.Span;
-        var result = new double[n];
-        span.CopyTo(result);
+        var result = new double?[n];
 
-        // Collect known (index, value) pairs
+        // Collect known (index, value) pairs — skip both null and NaN
         var knownIdx = new List<double>();
         var knownVal = new List<double>();
         for (int i = 0; i < n; i++)
         {
-            if (!column.Nulls.IsNull(i))
+            if (!column.Nulls.IsNull(i) && !double.IsNaN(span[i]))
             {
                 knownIdx.Add(i);
                 knownVal.Add(span[i]);
+                result[i] = span[i];
             }
         }
 
@@ -261,7 +364,8 @@ public static class MissingDataExtensions
             if (knownIdx.Count == 1)
                 for (int i = 0; i < n; i++)
                     result[i] = knownVal[0];
-            return new Column<double>(column.Name, result);
+            // else: all null — leave as null
+            return Column<double>.FromNullable(column.Name, result);
         }
 
         // Compute natural cubic spline coefficients
@@ -270,10 +374,10 @@ public static class MissingDataExtensions
         int m = x.Length;
         var (a, b, c, d) = ComputeSplineCoefficients(x, y, m);
 
-        // Evaluate spline at each null position
+        // Evaluate spline at each null/NaN position
         for (int i = 0; i < n; i++)
         {
-            if (!column.Nulls.IsNull(i)) continue;
+            if (result[i].HasValue) continue;
 
             // Find the spline segment
             double xi = i;
@@ -292,7 +396,7 @@ public static class MissingDataExtensions
             result[i] = a[seg] + b[seg] * dx + c[seg] * dx * dx + d[seg] * dx * dx * dx;
         }
 
-        return new Column<double>(column.Name, result);
+        return Column<double>.FromNullable(column.Name, result);
     }
 
     /// <summary>Natural cubic spline: compute coefficients a, b, c, d for each segment.</summary>
@@ -387,7 +491,20 @@ public static class MissingDataExtensions
     public static Column<T> Interpolate<T>(this Column<T> column, InterpolationMethod method = InterpolationMethod.Linear)
         where T : struct, INumber<T>
     {
-        if (column.NullCount == 0)
+        // Check for NaN values in addition to null bitmask (same as Column<double> overload)
+        bool hasMissing = column.NullCount > 0;
+        if (!hasMissing && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
+        {
+            var checkSpan = column.Buffer.Span;
+            for (int i = 0; i < checkSpan.Length; i++)
+            {
+                if (typeof(T) == typeof(float) && float.IsNaN(Unsafe.As<T, float>(ref Unsafe.AsRef(in checkSpan[i]))))
+                { hasMissing = true; break; }
+                if (typeof(T) == typeof(double) && double.IsNaN(Unsafe.As<T, double>(ref Unsafe.AsRef(in checkSpan[i]))))
+                { hasMissing = true; break; }
+            }
+        }
+        if (!hasMissing)
             return column;
 
         // For non-double types, convert to double, interpolate, convert back
@@ -403,9 +520,9 @@ public static class MissingDataExtensions
         var span = column.Buffer.Span;
         var result = new T?[n];
 
-        // Copy non-null values
+        // Copy non-null, non-NaN values
         for (int i = 0; i < n; i++)
-            result[i] = column.Nulls.IsNull(i) ? null : span[i];
+            result[i] = IsEffectivelyMissing(column, i) ? null : span[i];
 
         // Interpolate nulls
         for (int i = 0; i < n; i++)
@@ -447,9 +564,14 @@ public static class MissingDataExtensions
     private static Column<T> ConvertFromDoubleColumn<T>(Column<double> column, string name) where T : struct, INumber<T>
     {
         var span = column.Buffer.Span;
-        var result = new T[column.Length];
+        var result = new T?[column.Length];
         for (int i = 0; i < column.Length; i++)
-            result[i] = T.CreateChecked(span[i]);
-        return new Column<T>(name, result);
+        {
+            if (column.IsNull(i))
+                result[i] = null;
+            else
+                result[i] = T.CreateChecked(span[i]);
+        }
+        return Column<T>.FromNullable(name, result);
     }
 }

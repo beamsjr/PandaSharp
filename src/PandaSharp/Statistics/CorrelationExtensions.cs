@@ -15,6 +15,11 @@ public static class CorrelationExtensions
         var names = numericCols.Select(c => c.Name).ToArray();
         int k = names.Length;
 
+        if (k == 0)
+        {
+            return new DataFrame(new List<IColumn> { new StringColumn("column", Array.Empty<string>()) });
+        }
+
         // Fast path: all Column<double> (with or without nulls — treat nulls as NaN)
         if (numericCols.All(c => c is Column<double>))
         {
@@ -47,11 +52,52 @@ public static class CorrelationExtensions
         int k = cols.Length;
         int n = cols[0].Length;
 
-        // For wide matrices (many columns, few rows), use parallel matrix multiply approach
+        // For wide matrices (many columns, few rows), use parallel matrix multiply approach.
+        // FastCorrWide is NaN-aware: it replaces NaN/null with 0 in centered data and
+        // adjusts per-column valid counts, so it handles NaN correctly.
         if (k > 100 && n < k)
             return FastCorrWide(cols, names, k, n);
 
-        // Standard pairwise approach for narrow matrices (few columns, many rows)
+        // Check if any column contains NaN or null; if so, fall back to NaN-aware path
+        bool hasAnyNaN = false;
+        for (int c = 0; c < k && !hasAnyNaN; c++)
+        {
+            if (cols[c].NullCount > 0) { hasAnyNaN = true; break; }
+            var span = cols[c].Values;
+            for (int i = 0; i < n; i++)
+            {
+                if (double.IsNaN(span[i]))
+                {
+                    hasAnyNaN = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasAnyNaN)
+        {
+            // NaN-aware fallback: use nullable path which handles NaN correctly
+            var doubleArrays = cols.Select(c =>
+            {
+                var span = c.Values;
+                var result = new double?[n];
+                for (int i = 0; i < n; i++)
+                    result[i] = (c.IsNull(i) || double.IsNaN(span[i])) ? null : span[i];
+                return result;
+            }).ToArray();
+
+            var fallbackColumns = new List<IColumn>();
+            fallbackColumns.Add(new StringColumn("column", names));
+            for (int j = 0; j < k; j++)
+            {
+                var values = new double[k];
+                for (int i = 0; i < k; i++)
+                    values[i] = PearsonCorrelation(doubleArrays[i], doubleArrays[j]);
+                fallbackColumns.Add(new Column<double>(names[j], values));
+            }
+            return new DataFrame(fallbackColumns);
+        }
+
         var data = new double[k][];
         var means = new double[k];
         for (int c = 0; c < k; c++)
@@ -128,6 +174,10 @@ public static class CorrelationExtensions
         // Build centered row-major matrix X[n, k]
         var X = new double[n * k];
         var stds = new double[k];
+        var validCounts = new int[k];
+        // Track per-row validity as a bitmask-like bool array for pairwise count computation
+        // valid[i * k + c] = true if row i, col c is valid
+        var valid = new bool[n * k];
 
         // Parallel: compute means (excluding nulls/NaN), center data, compute stds
         Parallel.For(0, k, c =>
@@ -142,19 +192,21 @@ public static class CorrelationExtensions
                 if (hasNulls && cols[c].IsNull(i)) continue;
                 if (double.IsNaN(v)) continue;
                 sum += v; cnt++;
+                valid[i * k + c] = true;
             }
+            validCounts[c] = cnt;
             double m = cnt > 0 ? sum / cnt : 0;
             // Center: replace null/NaN with 0 (neutral for dot product)
             double ss = 0;
             for (int i = 0; i < n; i++)
             {
-                double v = span[i];
-                if ((hasNulls && cols[c].IsNull(i)) || double.IsNaN(v))
+                if (!valid[i * k + c])
                 {
                     X[i * k + c] = 0; // neutral for dot product
                 }
                 else
                 {
+                    double v = span[i];
                     double cv = v - m;
                     X[i * k + c] = cv;
                     ss += cv * cv;
@@ -167,6 +219,11 @@ public static class CorrelationExtensions
         var C = new double[k * k];
         Native.NativeOps.GramMatrixUpper(X, n, k, C);
 
+        // Check if any column has missing values; if not, skip pairwise count computation
+        bool anyMissing = false;
+        for (int c = 0; c < k; c++)
+            if (validCounts[c] < n) { anyMissing = true; break; }
+
         // Convert to correlation + build DataFrame
         var columns = new List<IColumn>();
         columns.Add(new StringColumn("column", names));
@@ -177,7 +234,17 @@ public static class CorrelationExtensions
             {
                 int ii = Math.Min(i, j), jj = Math.Max(i, j);
                 double si = stds[ii], sj = stds[jj];
-                values[i] = (si == 0 || sj == 0) ? double.NaN : C[ii * k + jj] / ((n - 1) * si * sj);
+                if (si == 0 || sj == 0)
+                {
+                    values[i] = double.NaN;
+                }
+                else
+                {
+                    // Use per-column valid count as denominator normalization
+                    // For no-missing case, this equals (n-1) for all pairs
+                    int denom = anyMissing ? Math.Min(validCounts[ii], validCounts[jj]) - 1 : n - 1;
+                    values[i] = denom > 0 ? C[ii * k + jj] / (denom * si * sj) : double.NaN;
+                }
             }
             columns.Add(new Column<double>(names[j], values));
         }

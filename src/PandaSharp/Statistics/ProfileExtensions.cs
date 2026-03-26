@@ -45,7 +45,24 @@ public static class ProfileExtensions
         var stats = new string?[StatNames.Length];
         int length = col.Length;
         int nullCount = col.NullCount;
-        int count = length - nullCount;
+
+        // For floating-point columns, count NaN values as missing too
+        int nanCount = 0;
+        if (col is Column<double> dc)
+        {
+            var span = dc.Buffer.Span;
+            for (int i = 0; i < dc.Length; i++)
+                if (!dc.IsNull(i) && double.IsNaN(span[i])) nanCount++;
+        }
+        else if (col is Column<float> fc)
+        {
+            var span = fc.Buffer.Span;
+            for (int i = 0; i < fc.Length; i++)
+                if (!fc.IsNull(i) && float.IsNaN(span[i])) nanCount++;
+        }
+
+        int totalMissing = nullCount + nanCount;
+        int count = length - totalMissing;
 
         // count
         stats[0] = count.ToString();
@@ -56,9 +73,9 @@ public static class ProfileExtensions
         // memory_bytes
         stats[13] = EstimateColumnMemory(col).ToString();
 
-        // null%
+        // null% (includes NaN)
         stats[8] = length > 0
-            ? (nullCount * 100.0 / length).ToString("F2")
+            ? (totalMissing * 100.0 / length).ToString("F2")
             : "0.00";
 
         bool isNumeric = IsNumericType(col.DataType);
@@ -108,16 +125,18 @@ public static class ProfileExtensions
             if (v > mx) mx = v;
         }
 
-        double mean = sum / count;
+        // Use data.Length (which reflects actual valid count after NaN filtering)
+        int validCount = data.Length;
+        double mean = sum / validCount;
 
         // Second pass: variance
         double sumSq = 0;
-        for (int i = 0; i < data.Length; i++)
+        for (int i = 0; i < validCount; i++)
         {
             double d = data[i] - mean;
             sumSq += d * d;
         }
-        double std = count > 1 ? Math.Sqrt(sumSq / (count - 1)) : 0;
+        double std = validCount > 1 ? Math.Sqrt(sumSq / (validCount - 1)) : 0;
 
         stats[1] = mean.ToString("G6");   // mean
         stats[2] = std.ToString("G6");     // std
@@ -206,48 +225,41 @@ public static class ProfileExtensions
     private static double[] ExtractNonNullDoubles(IColumn col, int count)
     {
         var result = new double[count];
+        int j = 0;
 
         if (col is Column<double> dc)
         {
             var span = dc.Buffer.Span;
-            int j = 0;
-            if (dc.NullCount == 0)
-            {
-                span.CopyTo(result);
-            }
-            else
-            {
-                for (int i = 0; i < dc.Length; i++)
-                    if (!dc.IsNull(i)) result[j++] = span[i];
-            }
+            for (int i = 0; i < dc.Length; i++)
+                if (!dc.IsNull(i) && !double.IsNaN(span[i])) result[j++] = span[i];
         }
         else if (col is Column<int> ic)
         {
             var span = ic.Buffer.Span;
-            int j = 0;
             for (int i = 0; i < ic.Length; i++)
                 if (!ic.IsNull(i)) result[j++] = span[i];
         }
         else if (col is Column<long> lc)
         {
             var span = lc.Buffer.Span;
-            int j = 0;
             for (int i = 0; i < lc.Length; i++)
                 if (!lc.IsNull(i)) result[j++] = span[i];
         }
         else if (col is Column<float> fc)
         {
             var span = fc.Buffer.Span;
-            int j = 0;
             for (int i = 0; i < fc.Length; i++)
-                if (!fc.IsNull(i)) result[j++] = span[i];
+                if (!fc.IsNull(i) && !float.IsNaN(span[i])) result[j++] = span[i];
         }
         else
         {
-            int j = 0;
             for (int i = 0; i < col.Length; i++)
                 if (!col.IsNull(i)) result[j++] = Convert.ToDouble(col.GetObject(i));
         }
+
+        // Trim array if NaN values were filtered out
+        if (j < count)
+            Array.Resize(ref result, j);
 
         return result;
     }

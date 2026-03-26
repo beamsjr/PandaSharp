@@ -499,6 +499,11 @@ public static class NativeOps
         }
     }
 
+    /// <summary>
+    /// Compute Q25, Q50, Q75 using native Floyd-Rivest selection (~2n comparisons).
+    /// Data array is modified in-place (partially sorted). NaN must be pre-filtered.
+    /// Returns (q25, q50, q75).
+    /// </summary>
     /// <summary>Native dedup hash for 2 string columns.</summary>
     public static long[] DedupHash2Str(int[] hash1, int[] hash2, int nRows)
     {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using PandaSharp;
+using PandaSharp.ML.Models;
 using PandaSharp.Viz.Rendering;
 
 namespace PandaSharp.Viz.Charts;
@@ -14,6 +15,7 @@ public record StatsSection(IReadOnlyList<(string Label, string Value)> Items) : 
 public record TableSection(DataFrame Data, int MaxRows = 20, string? Caption = null) : StorySection;
 public record CalloutSection(string Content, CalloutStyle Style = CalloutStyle.Info) : StorySection;
 public record DividerSection() : StorySection;
+public record RawHtmlSection(string Html, string? Caption = null) : StorySection;
 public record RowSection(IReadOnlyList<StorySection> Children) : StorySection;
 
 public enum CalloutStyle { Info, Warning, Success, Note }
@@ -95,6 +97,30 @@ public class StoryBoard
         return this;
     }
 
+    /// <summary>Add a decision tree visualization from a regression tree.</summary>
+    public StoryBoard Tree(DecisionTreeRegressor tree, string[]? featureNames = null, int maxDepth = 0, string? caption = null)
+    {
+        var divId = $"tree_{Guid.NewGuid():N}";
+        _sections.Add(new RawHtmlSection(TreeVisualizer.ToFragment(tree, featureNames, maxDepth, divId), caption));
+        return this;
+    }
+
+    /// <summary>Add a decision tree visualization from a classification tree.</summary>
+    public StoryBoard Tree(DecisionTreeClassifier tree, string[]? featureNames = null, int maxDepth = 0, string? caption = null)
+    {
+        var divId = $"tree_{Guid.NewGuid():N}";
+        _sections.Add(new RawHtmlSection(TreeVisualizer.ToFragment(tree, featureNames, maxDepth, divId), caption));
+        return this;
+    }
+
+    /// <summary>Add a decision tree visualization from a random forest (specific tree index).</summary>
+    public StoryBoard Tree(RandomForestRegressor forest, int treeIndex, string[]? featureNames = null, int maxDepth = 3, string? caption = null)
+    {
+        var divId = $"tree_{Guid.NewGuid():N}";
+        _sections.Add(new RawHtmlSection(TreeVisualizer.ToFragment(forest, treeIndex, featureNames, maxDepth, divId), caption));
+        return this;
+    }
+
     /// <summary>Add a row of statistics cards.</summary>
     public StoryBoard Stats(params (string Label, string Value)[] items)
     {
@@ -113,6 +139,21 @@ public class StoryBoard
     public StoryBoard Callout(string content, CalloutStyle style = CalloutStyle.Info)
     {
         _sections.Add(new CalloutSection(content, style));
+        return this;
+    }
+
+    /// <summary>Add a grid of charts (SubplotBuilder) inline in the report.</summary>
+    public StoryBoard Grid(SubplotBuilder grid, string? caption = null)
+    {
+        var id = $"grid_{Guid.NewGuid():N}";
+        _sections.Add(new RawHtmlSection(grid.ToHtmlFragment(id), caption));
+        return this;
+    }
+
+    /// <summary>Embed raw HTML content (e.g. a tree visualizer or custom D3 diagram).</summary>
+    public StoryBoard Embed(string html, string? caption = null)
+    {
+        _sections.Add(new RawHtmlSection(html, caption));
         return this;
     }
 

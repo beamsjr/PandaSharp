@@ -224,10 +224,12 @@ public class StreamFrame
         foreach (var agg in _aggregations)
         {
             var values = new List<double>();
+            int nonNullCount = 0;
             foreach (var evt in events)
             {
                 if (evt.Data.TryGetValue(agg.SourceColumn, out var val) && val is not null)
                 {
+                    nonNullCount++;
                     try { values.Add(Convert.ToDouble(val)); }
                     catch { }
                 }
@@ -239,7 +241,9 @@ public class StreamFrame
                 AggType.Mean => values.Count > 0 ? values.Average() : 0,
                 AggType.Min => values.Count > 0 ? values.Min() : 0,
                 AggType.Max => values.Count > 0 ? values.Max() : 0,
-                AggType.Count => values.Count,
+                // Count should count all events with the field present and non-null,
+                // not just those that are convertible to double
+                AggType.Count => nonNullCount,
                 _ => 0
             };
 

@@ -90,6 +90,7 @@ public static class OrcWriter
                 else if (dt == typeof(long)) writer.Write(0L);
                 else if (dt == typeof(float)) writer.Write(0f);
                 else if (dt == typeof(double)) writer.Write(0d);
+                else if (dt == typeof(DateTime)) writer.Write(0L); // DateTime stored as ticks (long)
                 else if (dt == typeof(string)) writer.Write(0); // length = 0
                 else if (dt == typeof(short)) writer.Write((short)0);
                 else if (dt == typeof(byte)) writer.Write((byte)0);
@@ -119,6 +120,9 @@ public static class OrcWriter
                     break;
                 case double d:
                     writer.Write(d);
+                    break;
+                case DateTime dtVal:
+                    writer.Write(dtVal.Ticks);
                     break;
                 case string str:
                     var bytes = Encoding.UTF8.GetBytes(str);
@@ -191,6 +195,7 @@ public static class OrcWriter
         if (type == typeof(float)) return 5;
         if (type == typeof(double)) return 6;
         if (type == typeof(string)) return 7;
+        if (type == typeof(DateTime)) return 8; // DateTime stored as ticks (long)
         throw new NotSupportedException($"Unsupported ORC type: {type.Name}");
     }
 

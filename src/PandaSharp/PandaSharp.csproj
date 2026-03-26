@@ -20,6 +20,8 @@
   <ItemGroup>
     <None Include="Native/libpandasharp.dylib" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/osx-arm64/native" Condition="Exists('Native/libpandasharp.dylib')" />
     <None Include="Native/libpandasharp.so" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/linux-x64/native" Condition="Exists('Native/libpandasharp.so')" />
+    <None Include="Native/libpandasharp_quantile.dylib" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/osx-arm64/native" Condition="Exists('Native/libpandasharp_quantile.dylib')" />
+    <None Include="Native/libpandasharp_quantile.so" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/linux-x64/native" Condition="Exists('Native/libpandasharp_quantile.so')" />
   </ItemGroup>
 
   <ItemGroup>

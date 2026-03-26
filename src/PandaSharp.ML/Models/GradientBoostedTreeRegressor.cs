@@ -223,7 +223,7 @@ public class GradientBoostedTreeRegressor : IModel
             ssTot += diffMean * diffMean;
         }
 
-        return ssTot == 0 ? 1.0 : 1.0 - ssRes / ssTot;
+        return ssTot == 0 ? (ssRes == 0 ? 1.0 : 0.0) : 1.0 - ssRes / ssTot;
     }
 
     private static double Mean(double[] data)

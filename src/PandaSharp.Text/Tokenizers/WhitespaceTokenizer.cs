@@ -36,7 +36,8 @@ public sealed class WhitespaceTokenizer : ITokenizer
         ArgumentNullException.ThrowIfNull(corpus);
         for (int i = 0; i < corpus.Length; i++)
         {
-            var text = corpus[i];
+            var text = corpus[i]
+                ?? throw new ArgumentNullException(nameof(corpus), $"Corpus entry at index {i} is null.");
             if (_lowercase) text = text.ToLowerInvariant();
             foreach (var token in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             {

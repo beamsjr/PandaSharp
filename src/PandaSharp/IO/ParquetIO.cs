@@ -90,6 +90,8 @@ public static class ParquetIO
                 return new Column<float>(name, fltArr);
             if (clrType == typeof(bool) && data is bool[] boolArr)
                 return new Column<bool>(name, boolArr);
+            if (clrType == typeof(DateTime) && data is DateTime[] dtArr)
+                return new Column<DateTime>(name, dtArr);
         }
 
         // Nullable columns: Parquet.Net returns T?[] for nullable fields
@@ -103,6 +105,8 @@ public static class ParquetIO
             return Column<float>.FromNullable(name, nullFltArr);
         if ((clrType == typeof(bool) || clrType == typeof(bool?)) && data is bool?[] nullBoolArr)
             return Column<bool>.FromNullable(name, nullBoolArr);
+        if ((clrType == typeof(DateTime) || clrType == typeof(DateTime?)) && data is DateTime?[] nullDtArr)
+            return Column<DateTime>.FromNullable(name, nullDtArr);
 
         // Non-nullable numeric stored as object[] (fallback)
         if (data is int[] intArr2 && hasNulls)
@@ -141,6 +145,8 @@ public static class ParquetIO
         if (clrType == typeof(float?)) return ConcatTyped<float?>(arrays, totalRows);
         if (clrType == typeof(bool)) return ConcatTyped<bool>(arrays, totalRows);
         if (clrType == typeof(bool?)) return ConcatTyped<bool?>(arrays, totalRows);
+        if (clrType == typeof(DateTime)) return ConcatTyped<DateTime>(arrays, totalRows);
+        if (clrType == typeof(DateTime?)) return ConcatTyped<DateTime?>(arrays, totalRows);
         if (clrType == typeof(string)) return ConcatTyped<string?>(arrays, totalRows);
 
         // Fallback
@@ -338,6 +344,8 @@ public static class ParquetIO
                 await WriteTypedColumn<float>(rgWriter, field, col);
             else if (col.DataType == typeof(bool))
                 await WriteTypedColumn<bool>(rgWriter, field, col);
+            else if (col.DataType == typeof(DateTime))
+                await WriteTypedColumn<DateTime>(rgWriter, field, col);
             else
                 await WriteStringColumn(rgWriter, field, col);
         }
@@ -379,6 +387,7 @@ public static class ParquetIO
         if (type == typeof(double)) return typeof(double);
         if (type == typeof(float)) return typeof(float);
         if (type == typeof(bool)) return typeof(bool);
+        if (type == typeof(DateTime)) return typeof(DateTime);
         return typeof(string);
     }
 

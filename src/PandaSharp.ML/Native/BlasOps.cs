@@ -74,6 +74,15 @@ internal static class BlasOps
     internal static unsafe void Dgemm(double[] A, double[] B, double[] C, int m, int n, int k,
         double alpha = 1.0, double beta = 0.0)
     {
+        // Guard: BLAS aborts on zero-size parameters
+        if (m == 0 || n == 0) return;
+        if (k == 0)
+        {
+            // C = beta * C (no multiplication terms)
+            for (int i = 0; i < m * n; i++) C[i] *= beta;
+            return;
+        }
+
         if (IsAvailable)
         {
             fixed (double* pA = A, pB = B, pC = C)
@@ -94,6 +103,15 @@ internal static class BlasOps
     internal static unsafe void Dgemv(double[] A, double[] x, double[] y, int m, int n,
         double alpha = 1.0, double beta = 0.0)
     {
+        // Guard: BLAS aborts on zero-size parameters
+        if (m == 0) return;
+        if (n == 0)
+        {
+            // y = alpha * 0 + beta * y = beta * y
+            for (int i = 0; i < m; i++) y[i] *= beta;
+            return;
+        }
+
         if (IsAvailable)
         {
             fixed (double* pA = A, pX = x, pY = y)
@@ -121,6 +139,15 @@ internal static class BlasOps
     internal static unsafe void DgemvT(double[] A, double[] x, double[] y, int m, int n,
         double alpha = 1.0, double beta = 0.0)
     {
+        // Guard: BLAS aborts on zero-size parameters
+        if (n == 0) return;
+        if (m == 0)
+        {
+            // y = beta * y (no rows in A to multiply)
+            for (int j = 0; j < n; j++) y[j] *= beta;
+            return;
+        }
+
         if (IsAvailable)
         {
             fixed (double* pA = A, pX = x, pY = y)
@@ -230,6 +257,8 @@ internal static class BlasOps
     /// </summary>
     internal static void PairwiseDistances(double[] X, double[] Y, double[] dist, int nX, int nY, int d)
     {
+        if (nX == 0 || nY == 0) return;
+
         // ||x-y||^2 = ||x||^2 + ||y||^2 - 2*x·y
         // Compute -2 * X @ Y^T using BLAS with transB
         if (IsAvailable)

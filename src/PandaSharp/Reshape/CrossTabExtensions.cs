@@ -63,6 +63,9 @@ public static class CrossTabExtensions
         var colVals = colCol.GetValues();
         int n = rowCol.Length;
 
+        // Use a sentinel string for null so that null and "" are distinct
+        const string NullSentinel = "\0__NULL__";
+
         // Build unique maps with ordinal comparison
         var rowMap = new Dictionary<string, int>(StringComparer.Ordinal);
         var rowOrder = new List<string>();
@@ -71,8 +74,8 @@ public static class CrossTabExtensions
 
         for (int i = 0; i < n; i++)
         {
-            var rv = rowVals[i] ?? "";
-            var cv = colVals[i] ?? "";
+            var rv = rowVals[i] ?? NullSentinel;
+            var cv = colVals[i] ?? NullSentinel;
             if (!rowMap.ContainsKey(rv)) { rowMap[rv] = rowOrder.Count; rowOrder.Add(rv); }
             if (!colMap.ContainsKey(cv)) { colMap[cv] = colOrder.Count; colOrder.Add(cv); }
         }
@@ -84,22 +87,25 @@ public static class CrossTabExtensions
 
         for (int i = 0; i < n; i++)
         {
-            var rv = rowVals[i] ?? "";
-            var cv = colVals[i] ?? "";
+            var rv = rowVals[i] ?? NullSentinel;
+            var cv = colVals[i] ?? NullSentinel;
             int ri = rowMap[rv];
             int ci = colMap[cv];
             counts[ri * nColUniques + ci]++;
         }
 
         var columns = new List<IColumn>();
-        columns.Add(new StringColumn(rowColumnName, rowOrder.Select(s => (string?)s).ToArray()));
+        // Map sentinel back to a display name for the output
+        columns.Add(new StringColumn(rowColumnName,
+            rowOrder.Select(s => s == NullSentinel ? (string?)null : s).ToArray()));
 
         for (int c = 0; c < nColUniques; c++)
         {
             var vals = new int[nRowUniques];
             for (int r = 0; r < nRowUniques; r++)
                 vals[r] = counts[r * nColUniques + c];
-            columns.Add(new Column<int>(colOrder[c], vals));
+            var colName = colOrder[c] == NullSentinel ? "null" : colOrder[c];
+            columns.Add(new Column<int>(colName, vals));
         }
 
         return new DataFrame(columns);

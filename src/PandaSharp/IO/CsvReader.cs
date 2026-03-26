@@ -88,13 +88,13 @@ public static class CsvReader
         string[] columnNames;
         if (options.HasHeader)
         {
-            var headerLine = sampleReader.ReadLine()
+            var headerLine = ReadRecord(sampleReader, options.QuoteChar)
                 ?? throw new InvalidDataException("CSV file is empty.");
             columnNames = ParseLine(headerLine, options.Delimiter, options.QuoteChar, options.StrictQuoting);
         }
         else
         {
-            var firstLine = sampleReader.ReadLine()
+            var firstLine = ReadRecord(sampleReader, options.QuoteChar)
                 ?? throw new InvalidDataException("CSV file is empty.");
             columnNames = Enumerable.Range(0, ParseLine(firstLine, options.Delimiter, options.QuoteChar, options.StrictQuoting).Length)
                 .Select(i => $"Column{i}").ToArray();
@@ -108,10 +108,10 @@ public static class CsvReader
             if (string.IsNullOrWhiteSpace(line)) { s--; continue; }
             if (options.CommentChar.HasValue && line[0] == options.CommentChar.Value) { s--; continue; }
 
-            var fields = ParseLine(line, options.Delimiter, options.QuoteChar, options.StrictQuoting);
+            var (fields, wasQuoted) = ParseLineWithQuoteInfo(line, options.Delimiter, options.QuoteChar, options.StrictQuoting);
             var normalized = new string?[columnNames.Length];
             for (int i = 0; i < Math.Min(fields.Length, columnNames.Length); i++)
-                normalized[i] = IsNullValue(fields[i], options.NullValues) ? null : fields[i];
+                normalized[i] = (!wasQuoted[i] && IsNullValue(fields[i], options.NullValues)) ? null : fields[i];
             sampleData.Add(normalized);
         }
 
@@ -160,22 +160,22 @@ public static class CsvReader
 
         if (options.HasHeader)
         {
-            var headerLine = reader.ReadLine()
+            var headerLine = ReadRecord(reader, options.QuoteChar)
                 ?? throw new InvalidDataException("CSV file is empty.");
             columnNames = ParseLine(headerLine, options.Delimiter, options.QuoteChar, options.StrictQuoting);
         }
         else
         {
             // No header: read first data line to determine column count, then buffer it
-            var firstLine = reader.ReadLine()
+            var firstLine = ReadRecord(reader, options.QuoteChar)
                 ?? throw new InvalidDataException("CSV file is empty.");
-            var firstFields = ParseLine(firstLine, options.Delimiter, options.QuoteChar, options.StrictQuoting);
+            var (firstFields, firstQuoted) = ParseLineWithQuoteInfo(firstLine, options.Delimiter, options.QuoteChar, options.StrictQuoting);
             columnNames = Enumerable.Range(0, firstFields.Length).Select(i => $"Column{i}").ToArray();
 
             // Buffer the first line so it's included in the first chunk
             var normalized = new string?[columnNames.Length];
             for (int i = 0; i < Math.Min(firstFields.Length, columnNames.Length); i++)
-                normalized[i] = IsNullValue(firstFields[i], options.NullValues) ? null : firstFields[i];
+                normalized[i] = (!firstQuoted[i] && IsNullValue(firstFields[i], options.NullValues)) ? null : firstFields[i];
             chunk.Add(normalized);
         }
 
@@ -185,10 +185,10 @@ public static class CsvReader
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (options.CommentChar.HasValue && line[0] == options.CommentChar.Value) continue;
 
-            var fields = ParseLine(line, options.Delimiter, options.QuoteChar, options.StrictQuoting);
+            var (fields, wasQuoted) = ParseLineWithQuoteInfo(line, options.Delimiter, options.QuoteChar, options.StrictQuoting);
             var normalized = new string?[columnNames.Length];
             for (int i = 0; i < Math.Min(fields.Length, columnNames.Length); i++)
-                normalized[i] = IsNullValue(fields[i], options.NullValues) ? null : fields[i];
+                normalized[i] = (!wasQuoted[i] && IsNullValue(fields[i], options.NullValues)) ? null : fields[i];
             chunk.Add(normalized);
 
             if (chunk.Count >= chunkSize)
@@ -277,8 +277,24 @@ public static class CsvReader
 
     internal static string[] ParseLine(string line, char delimiter, char quoteChar, bool strictQuoting = false)
     {
-        if (line.Length == 0) return [""];
+        var (fields, _) = ParseLineCore(line, delimiter, quoteChar, strictQuoting);
+        return fields;
+    }
+
+    /// <summary>
+    /// Parse a CSV line, returning both fields and whether each field was quoted.
+    /// Quoted empty strings ("") are distinct from unquoted empty (null).
+    /// </summary>
+    internal static (string[] Fields, bool[] WasQuoted) ParseLineWithQuoteInfo(string line, char delimiter, char quoteChar, bool strictQuoting = false)
+    {
+        return ParseLineCore(line, delimiter, quoteChar, strictQuoting);
+    }
+
+    private static (string[] Fields, bool[] WasQuoted) ParseLineCore(string line, char delimiter, char quoteChar, bool strictQuoting)
+    {
+        if (line.Length == 0) return ([""], [false]);
         var fields = new List<string>();
+        var wasQuoted = new List<bool>();
         int i = 0;
         bool lastWasDelimiter = false;
         while (i < line.Length)
@@ -338,6 +354,7 @@ public static class CsvReader
                     fields.Add(field.ToString());
                 }
 
+                wasQuoted.Add(true);
                 i = closedProperly ? scanEnd + 1 : scanEnd; // skip past closing quote
                 if (i < line.Length && line[i] == delimiter) { i++; lastWasDelimiter = true; }
             }
@@ -347,12 +364,13 @@ public static class CsvReader
                 int start = i;
                 while (i < line.Length && line[i] != delimiter) i++;
                 fields.Add(line[start..i]);
+                wasQuoted.Add(false);
                 if (i < line.Length) { i++; lastWasDelimiter = true; }
             }
         }
         // If line ended with delimiter, add trailing empty field
-        if (lastWasDelimiter) fields.Add("");
-        return fields.ToArray();
+        if (lastWasDelimiter) { fields.Add(""); wasQuoted.Add(false); }
+        return (fields.ToArray(), wasQuoted.ToArray());
     }
 
     /// <summary>
@@ -449,9 +467,9 @@ public static class CsvReader
         for (int i = 0; i < options.SkipRows; i++)
             reader.ReadLine();
 
-        // Skip header if present
+        // Skip header if present (use ReadRecord to handle multi-line quoted headers)
         if (options.HasHeader)
-            reader.ReadLine();
+            ReadRecord(reader, options.QuoteChar);
 
         int colCount = schema.Length;
 
@@ -461,6 +479,7 @@ public static class CsvReader
         var doubleBuilders = new List<double?>[colCount];
         var floatBuilders = new List<float?>[colCount];
         var boolBuilders = new List<bool?>[colCount];
+        var dateTimeBuilders = new List<DateTime?>[colCount];
         var stringBuilders = new List<string?>[colCount];
 
         for (int c = 0; c < colCount; c++)
@@ -471,6 +490,7 @@ public static class CsvReader
             else if (t == typeof(double)) doubleBuilders[c] = new List<double?>(1024);
             else if (t == typeof(float)) floatBuilders[c] = new List<float?>(1024);
             else if (t == typeof(bool)) boolBuilders[c] = new List<bool?>(1024);
+            else if (t == typeof(DateTime)) dateTimeBuilders[c] = new List<DateTime?>(1024);
             else stringBuilders[c] = new List<string?>(1024);
         }
 
@@ -486,8 +506,8 @@ public static class CsvReader
         // we detect an incomplete quoted field (odd number of quotes).
         while ((line = reader.ReadLine()) is not null)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (options.CommentChar.HasValue && line[0] == options.CommentChar.Value) continue;
+            if (line.Length == 0 && colCount > 1) continue; // skip truly blank lines in multi-column CSVs
+            if (options.CommentChar.HasValue && line.Length > 0 && line[0] == options.CommentChar.Value) continue;
 
             // Check if this line has an incomplete multi-line quoted field
             if (line.Contains(quote))
@@ -514,17 +534,20 @@ public static class CsvReader
             // Check if line contains quotes — if so, use full ParseLine for correctness
             if (line.Contains(quote))
             {
-                var fields = ParseLine(line, delim, quote, options.StrictQuoting);
+                var (fields, fieldQuoted) = ParseLineWithQuoteInfo(line, delim, quote, options.StrictQuoting);
                 for (int c = 0; c < Math.Min(fields.Length, colCount); c++)
                 {
                     var f = fields[c];
-                    bool iN = nullSet.Contains(f);
+                    bool iN = !fieldQuoted[c] && nullSet.Contains(f);
                     var t2 = schema[c].Type;
                     if (t2 == typeof(int)) intBuilders[c]!.Add(iN ? null : int.Parse(f, System.Globalization.CultureInfo.InvariantCulture));
                     else if (t2 == typeof(long)) longBuilders[c]!.Add(iN ? null : long.Parse(f, System.Globalization.CultureInfo.InvariantCulture));
                     else if (t2 == typeof(double)) doubleBuilders[c]!.Add(iN ? null : double.Parse(f, System.Globalization.CultureInfo.InvariantCulture));
                     else if (t2 == typeof(float)) floatBuilders[c]!.Add(iN ? null : float.Parse(f, System.Globalization.CultureInfo.InvariantCulture));
                     else if (t2 == typeof(bool)) boolBuilders[c]!.Add(iN ? null : bool.Parse(f));
+                    else if (t2 == typeof(DateTime)) dateTimeBuilders[c]!.Add(iN ? null : (options.DateFormat is not null
+                        ? DateTime.ParseExact(f, options.DateFormat, System.Globalization.CultureInfo.InvariantCulture)
+                        : DateTime.Parse(f, System.Globalization.CultureInfo.InvariantCulture)));
                     else stringBuilders[c]!.Add(iN ? null : f);
                 }
                 continue;
@@ -551,6 +574,7 @@ public static class CsvReader
                     else if (t == typeof(double)) doubleBuilders[c]!.Add(null);
                     else if (t == typeof(float)) floatBuilders[c]!.Add(null);
                     else if (t == typeof(bool)) boolBuilders[c]!.Add(null);
+                    else if (t == typeof(DateTime)) dateTimeBuilders[c]!.Add(null);
                     else stringBuilders[c]!.Add(null);
                 }
                 else if (t == typeof(int))
@@ -563,6 +587,10 @@ public static class CsvReader
                     floatBuilders[c]!.Add(float.Parse(fieldSpan, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture));
                 else if (t == typeof(bool))
                     boolBuilders[c]!.Add(bool.Parse(fieldSpan));
+                else if (t == typeof(DateTime))
+                    dateTimeBuilders[c]!.Add(options.DateFormat is not null
+                        ? DateTime.ParseExact(fieldSpan, options.DateFormat, System.Globalization.CultureInfo.InvariantCulture)
+                        : DateTime.Parse(fieldSpan, System.Globalization.CultureInfo.InvariantCulture));
                 else
                     stringBuilders[c]!.Add(fieldSpan.ToString()); // only strings allocate
             }
@@ -578,6 +606,7 @@ public static class CsvReader
             else if (t == typeof(double)) columns[c] = Column<double>.FromNullable(name, doubleBuilders[c]!.ToArray());
             else if (t == typeof(float)) columns[c] = Column<float>.FromNullable(name, floatBuilders[c]!.ToArray());
             else if (t == typeof(bool)) columns[c] = Column<bool>.FromNullable(name, boolBuilders[c]!.ToArray());
+            else if (t == typeof(DateTime)) columns[c] = Column<DateTime>.FromNullable(name, dateTimeBuilders[c]!.ToArray());
             else columns[c] = new StringColumn(name, stringBuilders[c]!.ToArray());
         }
 

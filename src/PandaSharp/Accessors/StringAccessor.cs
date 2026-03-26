@@ -234,6 +234,12 @@ public class StringAccessor
         {
             if (Values[i] is { } s)
             {
+                if (substring.Length == 0)
+                {
+                    // Convention: empty substring occurs at every position + end = Length + 1
+                    result[i] = s.Length + 1;
+                    continue;
+                }
                 int count = 0, idx = 0;
                 while ((idx = s.IndexOf(substring, idx, StringComparison.Ordinal)) >= 0)
                 {

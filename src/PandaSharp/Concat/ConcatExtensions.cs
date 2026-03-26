@@ -43,14 +43,14 @@ public static class ConcatExtensions
 
         foreach (var colName in allColumns)
         {
-            // Find the first frame that has this column to determine type
+            // Find the widest numeric type across all frames for this column
             Type? colType = null;
             for (int f = 0; f < frames.Length; f++)
             {
                 if (columnSets[f].Contains(colName))
                 {
-                    colType = frames[f][colName].DataType;
-                    break;
+                    var frameType = frames[f][colName].DataType;
+                    colType = colType is null ? frameType : WidenType(colType, frameType);
                 }
             }
 
@@ -123,5 +123,27 @@ public static class ConcatExtensions
         for (int i = 0; i < values.Length; i++)
             typed[i] = values[i] is null ? null : (T)Convert.ChangeType(values[i]!, typeof(T));
         return Column<T>.FromNullable(name, typed);
+    }
+
+    private static readonly Dictionary<Type, int> NumericPriority = new()
+    {
+        [typeof(byte)] = 1,
+        [typeof(short)] = 2,
+        [typeof(int)] = 3,
+        [typeof(long)] = 4,
+        [typeof(float)] = 5,
+        [typeof(double)] = 6,
+    };
+
+    /// <summary>
+    /// Return the wider of two numeric types. If both are numeric, pick the higher-priority one.
+    /// If either is non-numeric (string, bool, DateTime), return the first type (no widening).
+    /// </summary>
+    private static Type WidenType(Type a, Type b)
+    {
+        if (a == b) return a;
+        if (NumericPriority.TryGetValue(a, out int pa) && NumericPriority.TryGetValue(b, out int pb))
+            return pa >= pb ? a : b;
+        return a; // non-numeric or mixed: keep first type
     }
 }
