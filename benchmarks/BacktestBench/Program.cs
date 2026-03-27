@@ -1,16 +1,16 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.Concat;
-using PandaSharp.GroupBy;
-using PandaSharp.IO;
-using PandaSharp.Joins;
-using PandaSharp.Viz.Charts;
-using PandaSharp.Window;
+using Cortex;
+using Cortex.Column;
+using Cortex.Concat;
+using Cortex.GroupBy;
+using Cortex.IO;
+using Cortex.Joins;
+using Cortex.Viz.Charts;
+using Cortex.Window;
 
 // ============================================================
-// Momentum Strategy Backtest — PandaSharp version
+// Momentum Strategy Backtest — Cortex version
 // Identical logic to Python version for fair comparison.
 // Outputs comparison StoryBoard with Python results.
 // ============================================================
@@ -23,7 +23,7 @@ var ops = new List<(string Name, long Ms, string Detail)>();
 long Lap(Stopwatch s) { var ms = s.ElapsedMilliseconds; s.Restart(); return ms; }
 var timer = Stopwatch.StartNew();
 
-Console.WriteLine("=== Momentum Backtest — PandaSharp ===\n");
+Console.WriteLine("=== Momentum Backtest — Cortex ===\n");
 
 // ── 1. Load all stocks ─────────────────────────────────
 Console.Write("  1. Load CSVs... ");
@@ -101,13 +101,13 @@ var tickerGroups = GroupByExtensions.GroupBy(liquid, "Ticker");
 
 // Use TransformDouble: extracts only the Close column per group, no DataFrame copies
 var sma20Col = tickerGroups.TransformDouble("Close", vals =>
-    PandaSharp.Native.NativeOps.IsAvailable
-        ? PandaSharp.Native.NativeOps.RollingMean(vals, 20)
+    Cortex.Native.NativeOps.IsAvailable
+        ? Cortex.Native.NativeOps.RollingMean(vals, 20)
         : ManagedRolling(vals, 20));
 
 var sma50Col = tickerGroups.TransformDouble("Close", vals =>
-    PandaSharp.Native.NativeOps.IsAvailable
-        ? PandaSharp.Native.NativeOps.RollingMean(vals, 50)
+    Cortex.Native.NativeOps.IsAvailable
+        ? Cortex.Native.NativeOps.RollingMean(vals, 50)
         : ManagedRolling(vals, 50));
 
 var momentumCol = tickerGroups.TransformDouble("Close", vals =>
@@ -287,14 +287,14 @@ foreach (var (name, csMs, _) in ops)
     if (pyMs > 0 && csMs > 0)
     {
         double ratio = (double)pyMs / csMs;
-        speedups.Add(ratio >= 1 ? $"PandaSharp {ratio:F1}x" : $"Python {1/ratio:F1}x");
+        speedups.Add(ratio >= 1 ? $"Cortex {ratio:F1}x" : $"Python {1/ratio:F1}x");
     }
     else speedups.Add("—");
 }
 
 var comparisonDf = new DataFrame(
     new StringColumn("Operation", opNames.Select(s => (string?)s).ToArray()),
-    new Column<double>("PandaSharp_ms", csharpTimes.ToArray()),
+    new Column<double>("Cortex_ms", csharpTimes.ToArray()),
     new Column<double>("Python_ms", pythonTimes.ToArray()),
     new StringColumn("Winner", speedups.Select(s => (string?)s).ToArray())
 );
@@ -310,24 +310,24 @@ for (int i = 0; i < csharpTimes.Count; i++)
     }
 }
 
-var story = StoryBoard.Create("Momentum Backtest: PandaSharp vs Python")
+var story = StoryBoard.Create("Momentum Backtest: Cortex vs Python")
     .Author("Head-to-Head Benchmark")
 
-    .Text($"A **momentum strategy backtest** across **{frames.Count:N0}** stocks — the same pipeline implemented identically in both PandaSharp (C#/.NET) and Python (pandas/numpy). This analysis was chosen because it exercises **joins, filters, rolling windows, ranking, and lambda scoring** — operations where architecture differences matter most.")
+    .Text($"A **momentum strategy backtest** across **{frames.Count:N0}** stocks — the same pipeline implemented identically in both Cortex (C#/.NET) and Python (pandas/numpy). This analysis was chosen because it exercises **joins, filters, rolling windows, ranking, and lambda scoring** — operations where architecture differences matter most.")
 
     .Stats(
-        ("PandaSharp", $"{totalMs:N0} ms"),
+        ("Cortex", $"{totalMs:N0} ms"),
         ("Python", pyTotal > 0 ? $"{pyTotal:N0} ms" : "N/A"),
-        ("PandaSharp Wins", csWins.ToString()),
+        ("Cortex Wins", csWins.ToString()),
         ("Python Wins", pyWins.ToString())
     );
 
 if (pyTotal > 0)
 {
     story = story
-        .Callout($"Overall: PandaSharp **{totalMs:N0} ms** vs Python **{pyTotal:N0} ms** — " +
+        .Callout($"Overall: Cortex **{totalMs:N0} ms** vs Python **{pyTotal:N0} ms** — " +
             (totalMs < pyTotal
-                ? $"PandaSharp is **{(double)pyTotal / totalMs:F1}x faster**."
+                ? $"Cortex is **{(double)pyTotal / totalMs:F1}x faster**."
                 : $"Python is **{(double)totalMs / pyTotal:F1}x faster**."),
             totalMs < pyTotal ? CalloutStyle.Success : CalloutStyle.Warning);
 }
@@ -342,15 +342,15 @@ story = story
     .Section("Operation-by-Operation Comparison")
     .Table(comparisonDf, caption: "Head-to-head timing (ms) — lower is better")
 
-    .Section("PandaSharp Timing Breakdown")
-    .Chart(timingDf, v => v.Bar("Operation", "Time_ms").Title("PandaSharp Operation Time (ms)"))
+    .Section("Cortex Timing Breakdown")
+    .Chart(timingDf, v => v.Bar("Operation", "Time_ms").Title("Cortex Operation Time (ms)"))
 
     .Divider()
-    .Section("Why PandaSharp Wins on Joins & Slicing")
-    .Text("PandaSharp's **typed int hash join** avoids the generic hash table that pandas uses. The **zero-copy Arrow slicing** for Head/Tail means no data is copied — just a pointer offset. And **compiled C# lambdas** run ~8x faster than Python's interpreted `apply()`.")
+    .Section("Why Cortex Wins on Joins & Slicing")
+    .Text("Cortex's **typed int hash join** avoids the generic hash table that pandas uses. The **zero-copy Arrow slicing** for Head/Tail means no data is copied — just a pointer offset. And **compiled C# lambdas** run ~8x faster than Python's interpreted `apply()`.")
 
     .Section("Where Python Wins")
-    .Text("pandas' **Cython-compiled GroupBy** and **NumPy vectorized arithmetic** are hard to beat from managed code. These operations compile to tight C loops with no overhead, while PandaSharp goes through .NET's JIT-compiled managed code.");
+    .Text("pandas' **Cython-compiled GroupBy** and **NumPy vectorized arithmetic** are hard to beat from managed code. These operations compile to tight C loops with no overhead, while Cortex goes through .NET's JIT-compiled managed code.");
 
 story.ToHtml(Path.Combine(outputDir, "backtest_comparison.html"));
 Console.WriteLine("done → stock_output/backtest_comparison.html");

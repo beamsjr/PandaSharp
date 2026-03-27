@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp.ML.Tensors;
-using PandaSharp.Text.Tokenizers;
-using PandaSharp.Text.Preprocessing;
-using PandaSharp.Text.Embeddings;
+using Cortex.ML.Tensors;
+using Cortex.Text.Tokenizers;
+using Cortex.Text.Preprocessing;
+using Cortex.Text.Embeddings;
 
 const int CorpusSize = 10_000;
 const int EmbeddingCount = 1_000;
@@ -18,7 +18,7 @@ var corpus = new string[CorpusSize];
 for (int i = 0; i < CorpusSize; i++)
     corpus[i] = $"The quick brown fox jumps over the lazy dog number {i} with extra words for padding and testing tokenization";
 
-Console.WriteLine("=== PandaSharp.Text Benchmark ===\n");
+Console.WriteLine("=== Cortex.Text Benchmark ===\n");
 
 // ═══════════════════════════════════════════════════════
 // 1. TOKENIZATION

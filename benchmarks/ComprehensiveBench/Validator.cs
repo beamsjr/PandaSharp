@@ -1,8 +1,8 @@
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.GroupBy;
-using PandaSharp.Statistics;
+using Cortex;
+using Cortex.Column;
+using Cortex.GroupBy;
+using Cortex.Statistics;
 
 namespace ComprehensiveBench;
 
@@ -61,8 +61,8 @@ public static class Validator
         var openCol = allStocks.GetColumn<double>("Open");
         var highCol = allStocks.GetColumn<double>("High");
         var lowCol = allStocks.GetColumn<double>("Low");
-        var dailyReturn = PandaSharp.Native.NativeOps.EvalDailyReturn(closeCol, openCol, "DailyReturn");
-        var spread = PandaSharp.Native.NativeOps.EvalSpread(highCol, lowCol, closeCol, "Spread");
+        var dailyReturn = Cortex.Native.NativeOps.EvalDailyReturn(closeCol, openCol, "DailyReturn");
+        var spread = Cortex.Native.NativeOps.EvalSpread(highCol, lowCol, closeCol, "Spread");
 
         // DailyReturn mean will be inf (some Open=0), matching Python
         double drMean = 0; var drSpan = dailyReturn.Values;
@@ -88,13 +88,13 @@ public static class Validator
         var volCol = withCalcs.GetColumn<double>("Volume");
         var clsCol = withCalcs.GetColumn<double>("Close");
         var retCol = withCalcs.GetColumn<double>("DailyReturn");
-        var mask = PandaSharp.Native.NativeOps.FilterComplex(retCol, volCol, clsCol, 2, 1_000_000, 5);
+        var mask = Cortex.Native.NativeOps.FilterComplex(retCol, volCol, clsCol, 2, 1_000_000, 5);
         int filterCount = 0; for (int i = 0; i < mask.Length; i++) if (mask[i]) filterCount++;
         CheckInt("Complex filter count", filterCount, py.GetProperty("complex_filter_count").GetInt32());
 
         // 3. Aggregation
         var (codes, uniques) = allStocks.GetStringColumn("Ticker").GetDictCodes();
-        var (sums, counts, mins, maxs, means, stds) = PandaSharp.Native.NativeOps.MultiAggDouble(closeCol, codes, uniques.Length);
+        var (sums, counts, mins, maxs, means, stds) = Cortex.Native.NativeOps.MultiAggDouble(closeCol, codes, uniques.Length);
         double meanOfMeans = 0; for (int i = 0; i < means.Length; i++) meanOfMeans += means[i];
         meanOfMeans /= means.Length;
         CheckClose("Agg mean of means", meanOfMeans, py.GetProperty("agg_mean_of_means"));

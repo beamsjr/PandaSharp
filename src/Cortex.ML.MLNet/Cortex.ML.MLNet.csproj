@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.ML.MLNet</RootNamespace>
+    <PackageId>Cortex.ML.MLNet</PackageId>
+    <Description>ML.NET IDataView bridge for Cortex DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML" Version="4.*" />
+  </ItemGroup>
+
+</Project>

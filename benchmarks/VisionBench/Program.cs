@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.ML.Tensors;
-using PandaSharp.Vision;
-using PandaSharp.Vision.Transforms;
+using Cortex;
+using Cortex.Column;
+using Cortex.ML.Tensors;
+using Cortex.Vision;
+using Cortex.Vision.Transforms;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -16,7 +16,7 @@ var results = new List<(string Cat, string Op, long Ms)>();
 long Lap(Stopwatch s) { var ms = s.ElapsedMilliseconds; s.Restart(); return ms; }
 var timer = Stopwatch.StartNew();
 
-Console.WriteLine("=== PandaSharp.Vision Benchmark v2 ===\n");
+Console.WriteLine("=== Cortex.Vision Benchmark v2 ===\n");
 
 var imagePaths = Directory.GetFiles(IMG_DIR, "*.png").OrderBy(f => f).Take(N_IMAGES).ToArray();
 
@@ -194,6 +194,6 @@ if (File.Exists(pyFile))
             Console.WriteLine($"  {cat,-20} PS: {csMs,6}ms  Py: {pyMs,6}ms  → {winner}");
         }
     }
-    Console.WriteLine($"\n  PandaSharp wins: {csWins}  Python wins: {pyWins}");
+    Console.WriteLine($"\n  Cortex wins: {csWins}  Python wins: {pyWins}");
     Console.WriteLine($"  Total: PS {total}ms vs Py {pyCats.Values.Sum()}ms → {(double)pyCats.Values.Sum()/total:F1}x faster");
 }

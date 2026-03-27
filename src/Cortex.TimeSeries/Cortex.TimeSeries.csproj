@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Cortex.TimeSeries</RootNamespace>
+    <PackageId>Cortex.TimeSeries</PackageId>
+    <Description>Time series forecasting and analysis for Cortex: ARIMA, exponential smoothing, seasonal decomposition, stationarity tests</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+</Project>

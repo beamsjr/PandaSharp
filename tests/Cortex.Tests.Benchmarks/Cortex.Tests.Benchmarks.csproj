@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.IO.Database\Cortex.IO.Database.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.Geo\Cortex.Geo.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.*" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,6 @@
-using PandaSharp.ML.Tensors;
-using PandaSharp.ML.Models;
-using PandaSharp.ML.ModelSelection;
+using Cortex.ML.Tensors;
+using Cortex.ML.Models;
+using Cortex.ML.ModelSelection;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -35,7 +35,7 @@ for (int r = 0; r < N; r++)
 var y_cls = new Tensor<double>(yClsData, N);
 var X_cls = X_reg; // same features
 
-Console.WriteLine("=== PandaSharp.ML Models Benchmark ===");
+Console.WriteLine("=== Cortex.ML Models Benchmark ===");
 Console.WriteLine($"  Data: {N} samples, {P} features\n");
 
 void Record(string cat, string name, long ms)

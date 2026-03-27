@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.IO.Database</RootNamespace>
+    <PackageId>Cortex.IO.Database</PackageId>
+    <Description>Database integration with expression push-down SQL generation for Cortex</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+  </ItemGroup>
+
+</Project>

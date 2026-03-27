@@ -29,8 +29,8 @@ jobs:
 
       - name: Test
         run: |
-          dotnet test tests/PandaSharp.Tests.Unit --no-build -c Release --logger "trx;LogFileName=unit.trx"
-          dotnet test tests/PandaSharp.IO.Database.Tests --no-build -c Release --logger "trx;LogFileName=db.trx"
-          dotnet test tests/PandaSharp.ML.Tests --no-build -c Release --logger "trx;LogFileName=ml.trx"
-          dotnet test tests/PandaSharp.Streaming.Tests --no-build -c Release --logger "trx;LogFileName=streaming.trx"
-          dotnet test tests/PandaSharp.Geo.Tests --no-build -c Release --logger "trx;LogFileName=geo.trx"
+          dotnet test tests/Cortex.Tests.Unit --no-build -c Release --logger "trx;LogFileName=unit.trx"
+          dotnet test tests/Cortex.IO.Database.Tests --no-build -c Release --logger "trx;LogFileName=db.trx"
+          dotnet test tests/Cortex.ML.Tests --no-build -c Release --logger "trx;LogFileName=ml.trx"
+          dotnet test tests/Cortex.Streaming.Tests --no-build -c Release --logger "trx;LogFileName=streaming.trx"
+          dotnet test tests/Cortex.Geo.Tests --no-build -c Release --logger "trx;LogFileName=geo.trx"

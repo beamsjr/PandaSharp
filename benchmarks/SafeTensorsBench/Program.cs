@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp.ML.Tensors;
-using PandaSharp.SafeTensors;
+using Cortex.ML.Tensors;
+using Cortex.SafeTensors;
 
 const string OutputDir = "st_bench_output";
 Directory.CreateDirectory(OutputDir);
@@ -10,7 +10,7 @@ var results = new List<(string Cat, string Op, long Ms)>();
 var timer = Stopwatch.StartNew();
 long Lap() { var ms = timer.ElapsedMilliseconds; timer.Restart(); return ms; }
 
-Console.WriteLine("=== PandaSharp.SafeTensors Benchmark ===\n");
+Console.WriteLine("=== Cortex.SafeTensors Benchmark ===\n");
 
 var rng = new Random(42);
 

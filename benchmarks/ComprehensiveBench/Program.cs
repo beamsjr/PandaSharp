@@ -1,18 +1,18 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.Concat;
-using PandaSharp.GroupBy;
-using PandaSharp.IO;
-using PandaSharp.Joins;
-using PandaSharp.Missing;
-using PandaSharp.Reshape;
-using PandaSharp.Statistics;
-using PandaSharp.Viz.Charts;
-using PandaSharp.Window;
-using PandaSharp.Expressions;
-using static PandaSharp.Expressions.Expr;
+using Cortex;
+using Cortex.Column;
+using Cortex.Concat;
+using Cortex.GroupBy;
+using Cortex.IO;
+using Cortex.Joins;
+using Cortex.Missing;
+using Cortex.Reshape;
+using Cortex.Statistics;
+using Cortex.Viz.Charts;
+using Cortex.Window;
+using Cortex.Expressions;
+using static Cortex.Expressions.Expr;
 
 var dataDir = "/Users/joe/Documents/Repository/lab/stock_market_analyzer/Stocks";
 Directory.CreateDirectory("stock_output");
@@ -21,8 +21,8 @@ var results = new List<(string Cat, string Op, long Ms, string Detail)>();
 long Lap(Stopwatch s) { var ms = s.ElapsedMilliseconds; s.Restart(); return ms; }
 var timer = Stopwatch.StartNew();
 
-Console.WriteLine("=== Comprehensive PandaSharp Benchmark ===");
-Console.WriteLine($"  Native accelerators: {(PandaSharp.Native.NativeOps.IsAvailable ? "LOADED" : "NOT AVAILABLE")}\n");
+Console.WriteLine("=== Comprehensive Cortex Benchmark ===");
+Console.WriteLine($"  Native accelerators: {(Cortex.Native.NativeOps.IsAvailable ? "LOADED" : "NOT AVAILABLE")}\n");
 
 // Load — pre-define schema to skip type inference (saves ~30% parse time)
 Console.Write("  Loading... ");
@@ -154,7 +154,7 @@ var closeDataForWindow = allStocks.GetColumn<double>("Close").Values.ToArray();
 // Fused: SMA20 + ExpandMax in a single parallel pass (one gather per group, two transforms)
 timer.Restart();
 var (sma20All, expandMaxAll) = allGroups.TransformDoubleMulti("Close", closeDataForWindow,
-    vals => PandaSharp.Native.NativeOps.IsAvailable ? PandaSharp.Native.NativeOps.RollingMean(vals, 20) : ManagedRolling(vals, 20),
+    vals => Cortex.Native.NativeOps.IsAvailable ? Cortex.Native.NativeOps.RollingMean(vals, 20) : ManagedRolling(vals, 20),
     vals => { var r = new double[vals.Length]; double max = double.MinValue; for (int i = 0; i < vals.Length; i++) { if (vals[i] > max) max = vals[i]; r[i] = max; } return r; });
 ms = Lap(timer);
 results.Add(("Window", "GroupBy Rolling SMA20 (all stocks)", ms / 2, $"{allStocks.RowCount:N0} rows"));
@@ -200,7 +200,7 @@ var (aggGroupIds, aggUniques) = allStocks.GetStringColumn("Ticker").GetDictCodes
 int aggNumGroups = aggUniques.Length;
 if (allStocks["Close"] is Column<double> aggCloseCol && aggCloseCol.NullCount == 0)
 {
-    var (sums, counts, mins, maxs, means, stds) = PandaSharp.Native.NativeOps.MultiAggDouble(aggCloseCol, aggGroupIds, aggNumGroups);
+    var (sums, counts, mins, maxs, means, stds) = Cortex.Native.NativeOps.MultiAggDouble(aggCloseCol, aggGroupIds, aggNumGroups);
 
     var dblCounts = new double[aggNumGroups];
     for (int g = 0; g < aggNumGroups; g++) dblCounts[g] = counts[g];
@@ -240,7 +240,7 @@ timer.Restart();
 DataFrame multiKeyAgg;
 if (joined["Close"] is Column<double> mkClose2 && mkClose2.NullCount == 0)
 {
-    var (mkSums, mkCounts, mkMins, mkMaxs, mkMeans, mkStds) = PandaSharp.Native.NativeOps.MultiAggDouble(mkClose2, compositeGroupIds, mkNumGroups2);
+    var (mkSums, mkCounts, mkMins, mkMaxs, mkMeans, mkStds) = Cortex.Native.NativeOps.MultiAggDouble(mkClose2, compositeGroupIds, mkNumGroups2);
 
     var k1 = new string?[mkNumGroups2]; var k2 = new string?[mkNumGroups2];
     for (int g = 0; g < mkNumGroups2; g++) { k1[g] = sectors[g / 2]; k2[g] = g % 2 == 0 ? "NYSE" : "NASDAQ"; }
@@ -265,7 +265,7 @@ Console.WriteLine("\n── Expression Chains ──");
 timer.Restart();
 DataFrame withCalcs;
 if (allStocks["Close"] is Column<double> cc && allStocks["Open"] is Column<double> oo && cc.NullCount == 0 && oo.NullCount == 0)
-    withCalcs = allStocks.AddColumn(PandaSharp.Native.NativeOps.EvalDailyReturn(cc, oo, "DailyReturn"));
+    withCalcs = allStocks.AddColumn(Cortex.Native.NativeOps.EvalDailyReturn(cc, oo, "DailyReturn"));
 else
     withCalcs = allStocks.Eval("DailyReturn = (Close - Open) / Open * 100");
 ms = Lap(timer); results.Add(("Expr", "DailyReturn = (Close-Open)/Open*100", ms, "")); Console.WriteLine($"  {"DailyReturn = (Close-Open)/Open*100",-55} {ms,6:N0} ms");
@@ -275,7 +275,7 @@ var lowCol = withCalcs["Low"] as Column<double>;
 var closeCol3 = withCalcs["Close"] as Column<double>;
 timer.Restart();
 if (highCol is not null && lowCol is not null && closeCol3 is not null && highCol.NullCount == 0)
-    withCalcs = withCalcs.AddColumn(PandaSharp.Native.NativeOps.EvalSpread(highCol, lowCol, closeCol3, "Spread"));
+    withCalcs = withCalcs.AddColumn(Cortex.Native.NativeOps.EvalSpread(highCol, lowCol, closeCol3, "Spread"));
 else
     withCalcs = withCalcs.Eval("Spread = (High - Low) / Close * 100");
 ms = Lap(timer); results.Add(("Expr", "Spread = (High-Low)/Close*100", ms, "")); Console.WriteLine($"  {"Spread = (High-Low)/Close*100",-55} {ms,6:N0} ms");
@@ -288,7 +288,7 @@ timer.Restart();
 
 DataFrame complexFilter;
 if (withCalcsD["DailyReturn"] is Column<double> retC && withCalcsD["Volume"] is Column<double> volC2 && withCalcsD["Close"] is Column<double> clsC2 && retC.NullCount == 0 && volC2.NullCount == 0)
-    complexFilter = withCalcsD.Filter(PandaSharp.Native.NativeOps.FilterComplex(retC, volC2, clsC2, 2, 1_000_000, 5));
+    complexFilter = withCalcsD.Filter(Cortex.Native.NativeOps.FilterComplex(retC, volC2, clsC2, 2, 1_000_000, 5));
 else
     complexFilter = withCalcsD.Eval("DailyReturn > 2 and Volume > 1000000 and Close > 5");
 ms = Lap(timer); results.Add(("Expr", "Complex filter: ret>2 & vol>1M & close>5", ms, $"{complexFilter.RowCount:N0} matches")); Console.WriteLine($"  {"Complex filter: ret>2 & vol>1M & close>5",-55} {ms,6:N0} ms");
@@ -412,11 +412,11 @@ Gc();
 Console.WriteLine("\n── Value Counts ──");
 
 timer.Restart();
-var vc = PandaSharp.Statistics.ValueCountsExtensions.ValueCounts(allStocks["Ticker"]);
+var vc = Cortex.Statistics.ValueCountsExtensions.ValueCounts(allStocks["Ticker"]);
 ms = Lap(timer); results.Add(("ValueCounts", "Ticker.value_counts()", ms, "")); Console.WriteLine($"  {"Ticker.value_counts()",-55} {ms,6:N0} ms");
 
 timer.Restart();
-var nu = PandaSharp.Statistics.ValueCountsExtensions.NUnique(allStocks["Ticker"]);
+var nu = Cortex.Statistics.ValueCountsExtensions.NUnique(allStocks["Ticker"]);
 ms = Lap(timer); results.Add(("ValueCounts", "Ticker.nunique()", ms, "")); Console.WriteLine($"  {"Ticker.nunique()",-55} {ms,6:N0} ms");
 
 // ═══════════════════════════════════════════════════════
@@ -444,7 +444,7 @@ for (int fi = 0; fi < closeNullable.Length; fi++)
 var closeWithNan = Column<double>.FromNullable("CloseNaN", closeNullable);
 
 timer.Restart();
-var filledFfill = closeWithNan.FillNa(PandaSharp.Missing.FillStrategy.Forward);
+var filledFfill = closeWithNan.FillNa(Cortex.Missing.FillStrategy.Forward);
 ms = Lap(timer); results.Add(("FillNa", "Forward fill (10% NaN)", ms, "")); Console.WriteLine($"  {"Forward fill (10% NaN)",-55} {ms,6:N0} ms");
 
 timer.Restart();
@@ -558,7 +558,7 @@ if (File.Exists("stock_output_python/comprehensive_results.json"))
 }
 
 var pyDict = pyResults.ToDictionary(r => r.Op, r => r.Ms);
-// Map PandaSharp ops that don't have exact Python name matches
+// Map Cortex ops that don't have exact Python name matches
 var pyCatTotals = pyResults.GroupBy(r => r.Cat).ToDictionary(g => g.Key, g => g.Sum(r => r.Ms));
 var pyOpAliases = new Dictionary<string, int>
 {
@@ -585,28 +585,28 @@ for (int i = 0; i < results.Count; i++)
 
 var compDf = new DataFrame(
     new StringColumn("Operation", opNames.Select(s => (string?)s).ToArray()),
-    new Column<double>("PandaSharp_ms", csTimes),
+    new Column<double>("Cortex_ms", csTimes),
     new Column<double>("Python_ms", pyTimes),
     new StringColumn("Winner", winners));
 
 var catDf = new DataFrame(
     new StringColumn("Category", cats.Keys.Select(s => (string?)s).ToArray()),
-    new Column<double>("PandaSharp_ms", cats.Values.Select(v => (double)v).ToArray()),
+    new Column<double>("Cortex_ms", cats.Values.Select(v => (double)v).ToArray()),
     new Column<double>("Python_ms", cats.Keys.Select(k => (double)pyResults.Where(r => r.Cat == k).Sum(r => r.Ms)).ToArray()));
 
-var story = StoryBoard.Create("PandaSharp vs Python — Comprehensive Benchmark")
+var story = StoryBoard.Create("Cortex vs Python — Comprehensive Benchmark")
     .Author("Head-to-Head across 8 Categories")
-    .Stats(("PandaSharp Total", $"{total:N0} ms"), ("Python Total", pyTotal > 0 ? $"{pyTotal:N0} ms" : "N/A"),
+    .Stats(("Cortex Total", $"{total:N0} ms"), ("Python Total", pyTotal > 0 ? $"{pyTotal:N0} ms" : "N/A"),
            ("PS Wins", csWins.ToString()), ("Python Wins", pyWins.ToString()))
     .Text($"**{results.Count}** operations across **8 categories** tested on **{allStocks.RowCount:N0}** stock market rows. " +
-          $"PandaSharp wins **{csWins}** operations, Python wins **{pyWins}**.")
+          $"Cortex wins **{csWins}** operations, Python wins **{pyWins}**.")
     .Section("Category Totals")
     .Table(catDf, caption: "Total time per category (ms)")
     .Section("Full Operation Breakdown")
     .Table(compDf, caption: "All operations — lower is better");
 
 if (total < pyTotal && pyTotal > 0)
-    story = story.Callout($"PandaSharp is **{(double)pyTotal / total:F1}x faster** overall!", CalloutStyle.Success);
+    story = story.Callout($"Cortex is **{(double)pyTotal / total:F1}x faster** overall!", CalloutStyle.Success);
 else if (pyTotal > 0)
     story = story.Callout($"Python is **{(double)total / pyTotal:F1}x faster** overall.", CalloutStyle.Warning);
 

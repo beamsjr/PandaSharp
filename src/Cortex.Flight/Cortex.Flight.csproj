@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.Flight</RootNamespace>
+    <PackageId>Cortex.Flight</PackageId>
+    <Description>Arrow Flight RPC for distributed DataFrame transport and Flight SQL</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" Version="18.*" />
+    <PackageReference Include="Apache.Arrow.Flight" Version="18.*" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.*" />
+  </ItemGroup>
+
+</Project>

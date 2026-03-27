@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\PandaSharp\PandaSharp.csproj" />
-    <ProjectReference Include="..\..\src\PandaSharp.ML\PandaSharp.ML.csproj" />
-    <ProjectReference Include="..\..\src\PandaSharp.TimeSeries\PandaSharp.TimeSeries.csproj" />
-    <ProjectReference Include="..\..\src\PandaSharp.Geo\PandaSharp.Geo.csproj" />
-    <ProjectReference Include="..\..\src\PandaSharp.Text\PandaSharp.Text.csproj" />
+    <ProjectReference Include="..\..\src\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.ML\Cortex.ML.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.TimeSeries\Cortex.TimeSeries.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.Geo\Cortex.Geo.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.Text\Cortex.Text.csproj" />
   </ItemGroup>
 </Project>

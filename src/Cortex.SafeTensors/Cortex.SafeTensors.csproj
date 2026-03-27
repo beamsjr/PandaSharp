@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Cortex.SafeTensors</RootNamespace>
+    <PackageId>Cortex.SafeTensors</PackageId>
+    <Description>HuggingFace SafeTensors format reader/writer for Cortex: memory-mapped tensor loading, zero-copy access</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+</Project>

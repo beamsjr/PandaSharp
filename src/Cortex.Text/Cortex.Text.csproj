@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Cortex.Text</RootNamespace>
+    <PackageId>Cortex.Text</PackageId>
+    <Description>NLP pipeline for Cortex: tokenizers, text preprocessing, embeddings, text analytics</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+</Project>

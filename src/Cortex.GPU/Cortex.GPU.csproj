@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Cortex.GPU</RootNamespace>
+    <PackageId>Cortex.GPU</PackageId>
+    <Description>GPU-accelerated operations for Cortex using ILGPU. Supports CUDA, OpenCL, and CPU fallback.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ILGPU" Version="1.*" />
+    <PackageReference Include="ILGPU.Algorithms" Version="1.*" />
+  </ItemGroup>
+</Project>

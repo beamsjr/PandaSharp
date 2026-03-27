@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>PandaSharp Object Detection</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee;
+               display: flex; flex-direction: column; align-items: center; }
+        .header { width: 100%; padding: 16px 24px; background: #16213e; display: flex; align-items: center; gap: 16px; }
+        h1 { font-size: 20px; }
+        .badge { background: #e94560; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .container { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+        canvas { border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); background: #000; }
+        button { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
+        .start { background: #4ecca3; color: #1a1a2e; }
+        .stop { background: #e94560; color: #fff; display: none; }
+        .stats { display: flex; gap: 20px; font-size: 13px; color: #aaa; }
+        .info { font-size: 13px; color: #666; max-width: 640px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PandaSharp Object Detection</h1>
+        <span class="badge">YOLOv8 + ONNX</span>
+    </div>
+    <div class="container">
+        <div class="stats">
+            <span id="status">Click Start</span>
+            <span>FPS: <strong id="fps">-</strong></span>
+            <span>Frames: <strong id="frameCount">0</strong></span>
+        </div>
+
+        <canvas id="canvas" width="640" height="480"></canvas>
+
+        <div>
+            <button class="start" id="startBtn" onclick="go()">Start Detection</button>
+            <button class="stop" id="stopBtn" onclick="halt()">Stop</button>
+        </div>
+        <p class="info">Server-side webcam capture + YOLOv8 detection via ONNX Runtime. Streamed as MJPEG, rendered to canvas.</p>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let abortController = null;
+        let frames = 0;
+        let fpsFrames = 0;
+        let fpsInterval = null;
+
+        async function go() {
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = '';
+            document.getElementById('status').textContent = 'Connecting...';
+
+            fpsInterval = setInterval(() => {
+                document.getElementById('fps').textContent = fpsFrames;
+                fpsFrames = 0;
+            }, 1000);
+
+            abortController = new AbortController();
+
+            try {
+                const response = await fetch('/api/stream', { signal: abortController.signal });
+                const reader = response.body.getReader();
+
+                let buffer = new Uint8Array(0);
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    // Append new data to buffer
+                    const newBuf = new Uint8Array(buffer.length + value.length);
+                    newBuf.set(buffer);
+                    newBuf.set(value, buffer.length);
+                    buffer = newBuf;
+
+                    // Look for JPEG frames in the buffer
+                    // JPEG starts with FF D8, ends with FF D9
+                    while (true) {
+                        const jpegStart = findBytes(buffer, [0xFF, 0xD8]);
+                        if (jpegStart === -1) break;
+
+                        const jpegEnd = findBytes(buffer, [0xFF, 0xD9], jpegStart + 2);
+                        if (jpegEnd === -1) break; // Incomplete JPEG, wait for more data
+
+                        // Extract complete JPEG
+                        const jpeg = buffer.slice(jpegStart, jpegEnd + 2);
+
+                        // Remove processed data from buffer
+                        buffer = buffer.slice(jpegEnd + 2);
+
+                        // Draw to canvas
+                        await drawJpeg(jpeg);
+
+                        frames++;
+                        fpsFrames++;
+                        document.getElementById('frameCount').textContent = frames;
+                        document.getElementById('status').textContent = 'Detecting...';
+                    }
+
+                    // Prevent buffer from growing unbounded
+                    if (buffer.length > 5000000) {
+                        buffer = buffer.slice(buffer.length - 1000000);
+                    }
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    console.error('Stream error:', e);
+                    document.getElementById('status').textContent = 'Error: ' + e.message;
+                }
+            }
+        }
+
+        function halt() {
+            if (abortController) abortController.abort();
+            document.getElementById('startBtn').style.display = '';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('status').textContent = 'Stopped';
+            clearInterval(fpsInterval);
+        }
+
+        function findBytes(buffer, pattern, startFrom = 0) {
+            for (let i = startFrom; i <= buffer.length - pattern.length; i++) {
+                let match = true;
+                for (let j = 0; j < pattern.length; j++) {
+                    if (buffer[i + j] !== pattern[j]) { match = false; break; }
+                }
+                if (match) return i;
+            }
+            return -1;
+        }
+
+        function drawJpeg(jpegData) {
+            return new Promise((resolve) => {
+                const blob = new Blob([jpegData], { type: 'image/jpeg' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                    resolve();
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    resolve();
+                };
+                img.src = url;
+            });
+        }
+    </script>
+</body>
+</html>

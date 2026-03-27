@@ -53,3 +53,6 @@ TODO_*.md
 *.ipynb
 house-prices-*
 prompts/
+*.onnx
+*.pt
+submission.csv

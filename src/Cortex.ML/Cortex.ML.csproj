@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.ML</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageId>Cortex.ML</PackageId>
+    <Description>Machine learning toolkit for Cortex: tensors, feature engineering, pipelines, evaluation</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>ml;machine-learning;dataframe;tensor;pipeline;feature-engineering</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cortex.ML.Tests" />
+    <InternalsVisibleTo Include="Cortex.Viz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+  </ItemGroup>
+
+</Project>

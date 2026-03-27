@@ -47,37 +47,37 @@ jobs:
 
       - name: Test
         run: |
-          dotnet test tests/PandaSharp.Tests.Unit --no-build -c Release --logger "trx;LogFileName=unit.trx"
-          dotnet test tests/PandaSharp.IO.Database.Tests --no-build -c Release --logger "trx;LogFileName=db.trx"
-          dotnet test tests/PandaSharp.ML.Tests --no-build -c Release --logger "trx;LogFileName=ml.trx"
-          dotnet test tests/PandaSharp.Streaming.Tests --no-build -c Release --logger "trx;LogFileName=streaming.trx"
-          dotnet test tests/PandaSharp.Geo.Tests --no-build -c Release --logger "trx;LogFileName=geo.trx"
-          dotnet test tests/PandaSharp.Text.Tests --no-build -c Release --logger "trx;LogFileName=text.trx"
-          dotnet test tests/PandaSharp.TimeSeries.Tests --no-build -c Release --logger "trx;LogFileName=timeseries.trx"
-          dotnet test tests/PandaSharp.SafeTensors.Tests --no-build -c Release --logger "trx;LogFileName=safetensors.trx"
+          dotnet test tests/Cortex.Tests.Unit --no-build -c Release --logger "trx;LogFileName=unit.trx"
+          dotnet test tests/Cortex.IO.Database.Tests --no-build -c Release --logger "trx;LogFileName=db.trx"
+          dotnet test tests/Cortex.ML.Tests --no-build -c Release --logger "trx;LogFileName=ml.trx"
+          dotnet test tests/Cortex.Streaming.Tests --no-build -c Release --logger "trx;LogFileName=streaming.trx"
+          dotnet test tests/Cortex.Geo.Tests --no-build -c Release --logger "trx;LogFileName=geo.trx"
+          dotnet test tests/Cortex.Text.Tests --no-build -c Release --logger "trx;LogFileName=text.trx"
+          dotnet test tests/Cortex.TimeSeries.Tests --no-build -c Release --logger "trx;LogFileName=timeseries.trx"
+          dotnet test tests/Cortex.SafeTensors.Tests --no-build -c Release --logger "trx;LogFileName=safetensors.trx"
 
       - name: Pack NuGet packages
         run: |
-          dotnet pack src/PandaSharp/PandaSharp.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.ML/PandaSharp.ML.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.ML.MLNet/PandaSharp.ML.MLNet.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.ML.Torch/PandaSharp.ML.Torch.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.ML.Onnx/PandaSharp.ML.Onnx.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.IO.Database/PandaSharp.IO.Database.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Viz/PandaSharp.Viz.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Plot/PandaSharp.Plot.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Interactive/PandaSharp.Interactive.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Streaming/PandaSharp.Streaming.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Streaming.Kafka/PandaSharp.Streaming.Kafka.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Streaming.Redis/PandaSharp.Streaming.Redis.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Geo/PandaSharp.Geo.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Cloud/PandaSharp.Cloud.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Flight/PandaSharp.Flight.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Text/PandaSharp.Text.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.TimeSeries/PandaSharp.TimeSeries.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.SafeTensors/PandaSharp.SafeTensors.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.GPU/PandaSharp.GPU.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
-          dotnet pack src/PandaSharp.Vision/PandaSharp.Vision.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex/Cortex.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.ML/Cortex.ML.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.ML.MLNet/Cortex.ML.MLNet.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.ML.Torch/Cortex.ML.Torch.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.ML.Onnx/Cortex.ML.Onnx.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.IO.Database/Cortex.IO.Database.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Viz/Cortex.Viz.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Plot/Cortex.Plot.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Interactive/Cortex.Interactive.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Streaming/Cortex.Streaming.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Streaming.Kafka/Cortex.Streaming.Kafka.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Streaming.Redis/Cortex.Streaming.Redis.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Geo/Cortex.Geo.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Cloud/Cortex.Cloud.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Flight/Cortex.Flight.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Text/Cortex.Text.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.TimeSeries/Cortex.TimeSeries.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.SafeTensors/Cortex.SafeTensors.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.GPU/Cortex.GPU.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
+          dotnet pack src/Cortex.Vision/Cortex.Vision.csproj -c Release --no-build /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
 
       - name: List packages
         run: ls -la ./nupkgs/

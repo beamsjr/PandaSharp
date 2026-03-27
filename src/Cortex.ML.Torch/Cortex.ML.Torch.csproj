@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.ML.Torch</RootNamespace>
+    <PackageId>Cortex.ML.Torch</PackageId>
+    <Description>TorchSharp tensor bridge for Cortex DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+    <ProjectReference Include="..\Cortex.SafeTensors\Cortex.SafeTensors.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TorchSharp" Version="0.103.*" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.Geo</RootNamespace>
+    <PackageId>Cortex.Geo</PackageId>
+    <Description>Geospatial operations for Cortex DataFrames — points, distances, spatial joins</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>geospatial;gis;distance;spatial-join;coordinates</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ProjNET" Version="2.1.0" />
+  </ItemGroup>
+
+</Project>

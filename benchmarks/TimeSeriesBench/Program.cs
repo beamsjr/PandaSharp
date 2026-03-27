@@ -1,8 +1,8 @@
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.TimeSeries.Models;
-using PandaSharp.TimeSeries.Decomposition;
-using PandaSharp.TimeSeries.Diagnostics;
+using Cortex;
+using Cortex.Column;
+using Cortex.TimeSeries.Models;
+using Cortex.TimeSeries.Decomposition;
+using Cortex.TimeSeries.Diagnostics;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -34,7 +34,7 @@ var df1K = new DataFrame(
     new Column<DateTime>("Date", dates1K),
     new Column<double>("Value", series1K));
 
-Console.WriteLine($"=== PandaSharp.TimeSeries Benchmark ({N} points) ===\n");
+Console.WriteLine($"=== Cortex.TimeSeries Benchmark ({N} points) ===\n");
 
 void Record(string cat, string name, long ms)
 {

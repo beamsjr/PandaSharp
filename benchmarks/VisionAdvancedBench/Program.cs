@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.ML.Tensors;
-using PandaSharp.Vision;
-using PandaSharp.Vision.Models;
-using PandaSharp.Vision.Transforms;
-using PandaSharp.Vision.Video;
+using Cortex;
+using Cortex.Column;
+using Cortex.ML.Tensors;
+using Cortex.Vision;
+using Cortex.Vision.Models;
+using Cortex.Vision.Transforms;
+using Cortex.Vision.Video;
 using FFMediaToolkit;
 
 const string VIDEO_PATH = "vision_bench_models/test_video.mp4";
@@ -17,7 +17,7 @@ var results = new List<(string Cat, string Op, long Ms)>();
 long Lap(Stopwatch s) { var ms = s.ElapsedMilliseconds; s.Restart(); return ms; }
 var timer = Stopwatch.StartNew();
 
-Console.WriteLine("=== PandaSharp.Vision Video + ONNX Benchmark ===\n");
+Console.WriteLine("=== Cortex.Vision Video + ONNX Benchmark ===\n");
 
 // ═══════════════════════════════════════════════════════
 // 1. VIDEO FRAME EXTRACTION
@@ -190,5 +190,5 @@ if (File.Exists(pyFile))
             Console.WriteLine($"  {cat,-20} PS: {csMs,6}ms  Py: {pyMs,6}ms  → {winner}");
         }
     }
-    Console.WriteLine($"\n  PandaSharp wins: {csWins}  Python wins: {pyWins}");
+    Console.WriteLine($"\n  Cortex wins: {csWins}  Python wins: {pyWins}");
 }

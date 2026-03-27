@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.Viz\Cortex.Viz.csproj" />
+  </ItemGroup>
+
+</Project>

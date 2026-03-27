@@ -1,26 +1,26 @@
 using System.Diagnostics;
 using System.Text.Json;
-using PandaSharp;
-using PandaSharp.Column;
-using PandaSharp.Concat;
-using PandaSharp.GroupBy;
-using PandaSharp.Missing;
-using PandaSharp.Statistics;
-using PandaSharp.Window;
-using PandaSharp.Expressions;
-using PandaSharp.ML.Models;
-using PandaSharp.ML.Transformers;
-using PandaSharp.ML.Metrics;
-using PandaSharp.ML.Splitting;
-using PandaSharp.ML.Tensors;
-using PandaSharp.TimeSeries.Models;
-using PandaSharp.TimeSeries.Decomposition;
-using PandaSharp.Geo;
-using PandaSharp.Text.Preprocessing;
-using static PandaSharp.Expressions.Expr;
+using Cortex;
+using Cortex.Column;
+using Cortex.Concat;
+using Cortex.GroupBy;
+using Cortex.Missing;
+using Cortex.Statistics;
+using Cortex.Window;
+using Cortex.Expressions;
+using Cortex.ML.Models;
+using Cortex.ML.Transformers;
+using Cortex.ML.Metrics;
+using Cortex.ML.Splitting;
+using Cortex.ML.Tensors;
+using Cortex.TimeSeries.Models;
+using Cortex.TimeSeries.Decomposition;
+using Cortex.Geo;
+using Cortex.Text.Preprocessing;
+using static Cortex.Expressions.Expr;
 
 /*
- * End-to-End Pipeline Benchmark: PandaSharp (C#)
+ * End-to-End Pipeline Benchmark: Cortex (C#)
  * Identical workflows to e2e_pipeline_python.py
  * Key difference: ZERO conversion boundaries — everything stays as DataFrame.
  */
@@ -47,9 +47,9 @@ void Record(string workflow, string op, double ms, string detail = "")
 void Gc() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
 
 Console.WriteLine($"\n{"".PadLeft(60, '=')}");
-Console.WriteLine($"  End-to-End Pipeline Benchmark — PandaSharp (C#)");
+Console.WriteLine($"  End-to-End Pipeline Benchmark — Cortex (C#)");
 Console.WriteLine($"  Rows: {ROWS:N0}");
-Console.WriteLine($"  Native accelerators: {(PandaSharp.Native.NativeOps.IsAvailable ? "LOADED" : "NOT AVAILABLE")}");
+Console.WriteLine($"  Native accelerators: {(Cortex.Native.NativeOps.IsAvailable ? "LOADED" : "NOT AVAILABLE")}");
 Console.WriteLine($"{"".PadLeft(60, '=')}");
 
 // ════════════════════════════════════════════════════════════════
@@ -619,7 +619,7 @@ Console.WriteLine($"  MultiModel TOTAL: {w5Total:F1}ms\n");
 // SUMMARY
 // ════════════════════════════════════════════════════════════════
 Console.WriteLine($"\n{"".PadLeft(60, '=')}");
-Console.WriteLine("  SUMMARY — PandaSharp End-to-End (C#)");
+Console.WriteLine("  SUMMARY — Cortex End-to-End (C#)");
 Console.WriteLine($"{"".PadLeft(60, '=')}");
 
 var totals = results.Where(r => r.Op == "TOTAL").ToList();

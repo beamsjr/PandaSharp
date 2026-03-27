@@ -1,4 +1,4 @@
-# PandaSharp Feature Tracker
+# Cortex Feature Tracker
 
 ## Implemented Features
 
@@ -116,7 +116,7 @@
 - [x] DataFrameSchema fluent builder: Column rules, HasColumns, NoExtraColumns, MinRows, MaxRows, NoDuplicateRows, Check()
 - [x] df.ValidateSchema(schema) — throws on failure, returns df for chaining
 
-### Plotting (PandaSharp.Plot)
+### Plotting (Cortex.Plot)
 - [x] ScottPlot 5: Scatter, Line, Bar, Histogram
 
 ### Copy-on-Write & Out-of-Core
@@ -126,7 +126,7 @@
 ### Time Series
 - [x] Resample with frequency parsing
 
-### PandaSharp.ML (Phase 1)
+### Cortex.ML (Phase 1)
 - [x] Tensor<T> (1D/2D, SIMD arithmetic, Sum, Mean, ArgMax, Transpose)
 - [x] DataFrame ↔ Tensor zero-copy bridge
 - [x] StandardScaler, MinMaxScaler (Fit/Transform)
@@ -152,7 +152,7 @@
 - [x] Pivot/CrossTab O(1) dictionary lookups
 - [x] Expanding O(n) single-pass (was O(n²) → 18,300x faster)
 - [x] Rolling O(n) sliding window mean
-- [x] Local parallelism: row-range partitioned Filter/Apply/Where/Arithmetic/Sum (PandaSharp.ParallelOps)
+- [x] Local parallelism: row-range partitioned Filter/Apply/Where/Arithmetic/Sum (Cortex.ParallelOps)
 
 ## TODO / Known Gaps
 - [x] RobustScaler (median/IQR based)
@@ -166,9 +166,9 @@
 - [x] TextVectorizer (Count + TF-IDF, vocabulary, maxFeatures, tokenizer)
 - [x] Pipeline serialization (SerializeToJson, Serialize to bytes, step order preserved)
 - [x] Ranking metrics (NDCG, MRR, MAP, @K support)
-- [x] ML.NET IDataView bridge (PandaSharp.ML.MLNet) — df.ToDataView(mlContext), dataView.ToDataFrame()
-- [x] TorchSharp tensor bridge (PandaSharp.ML.Torch) — df.ToTorchTensor(), tensor.ToDataFrame(), ToTorchDataLoader()
-- [x] ONNX Runtime scorer (PandaSharp.ML.Onnx) — OnnxScorer.Predict(df), PredictBatched(df, batchSize)
+- [x] ML.NET IDataView bridge (Cortex.ML.MLNet) — df.ToDataView(mlContext), dataView.ToDataFrame()
+- [x] TorchSharp tensor bridge (Cortex.ML.Torch) — df.ToTorchTensor(), tensor.ToDataFrame(), ToTorchDataLoader()
+- [x] ONNX Runtime scorer (Cortex.ML.Onnx) — OnnxScorer.Predict(df), PredictBatched(df, batchSize)
 - [x] DataFrameDataLoader (batched, shuffled, deterministic seed, pre-extracted columns)
 - [x] Feature importance (permutation importance with configurable repeats, sorted output)
 - [x] README.md (quick start, I/O, expressions, lazy eval, joins, ML, benchmarks, install)
@@ -178,7 +178,7 @@
 - [x] Interpolation methods: Polynomial (Neville's algorithm), Cubic/Spline/Pchip (natural cubic spline)
 - [x] Tensor N-dimensional operations: Slice, SumAxis, ArgMax generalized for any rank (stride-based indexing)
 
-## PandaSharp.IO.Database — Smart Database Integration
+## Cortex.IO.Database — Smart Database Integration
 
 ### Phase 1: Core Engine ✅
 - [x] DatabaseScanner: Scan, ScanSql, ScanGroupBy, Schema, Count
@@ -196,9 +196,9 @@
 - [x] Batched multi-row INSERT writes (configurable batchSize, default 1000 rows per statement)
 - [x] Connection pooling: DatabasePool.Register/Table/Query/Unregister/DisposeAll
 - [x] Lazy database scans: scanner.Lazy().Filter(...).Select(...).Sort(...).Head(...).Collect() with auto SQL push-down + fallback
-- [x] Arrow Flight RPC: FlightDataClient for distributed DataFrame get/put/list (PandaSharp.Flight)
+- [x] Arrow Flight RPC: FlightDataClient for distributed DataFrame get/put/list (Cortex.Flight)
 
-## PandaSharp.Viz — Interactive Visualization
+## Cortex.Viz — Interactive Visualization
 
 ### Phase 1: Core Engine ✅
 - [x] VizBuilder fluent API: df.Viz().Bar/Line/Scatter/Histogram/Box/Heatmap/Pie/Area
@@ -227,7 +227,7 @@
 - [x] Animation: .Animate("Year") for time-based transitions (Plotly frames, slider, play/pause)
 - [x] .ToPng() / .ToSvg() static export via PuppeteerSharp (headless Chromium, no Node.js required)
 
-## PandaSharp.ML Code Review Issues (2026-03-24)
+## Cortex.ML Code Review Issues (2026-03-24)
 - [x] Tensor constructor doc: fixed misleading "zero-copy" comment
 - [x] Pipeline serialization v2: serializes learned params for all transformers via reflection
 - [x] DataViewBridge.ToDataView: proper type mapping (Double, Int32, Int64, Bool, Text) + typed ToDataFrame builders (zero boxing)
@@ -245,9 +245,9 @@
 - [x] Tensor.Slice bounds-check: throws ArgumentOutOfRangeException
 - [x] FeaturePipeline.Fit: documented re-fit behavior in XML doc
 
-## Ecosystem Roadmap (from PandaSharp_Ecosystem_Roadmap.docx)
+## Ecosystem Roadmap (from Cortex_Ecosystem_Roadmap.docx)
 
-### PandaSharp.Streaming — Real-Time Event Processing
+### Cortex.Streaming — Real-Time Event Processing
 
 #### Phase 1: Core Engine ✅
 - [x] StreamFrame fluent API: StreamFrame.From(source).Window(...).Agg(...).OnEmit(...).Start()
@@ -262,14 +262,14 @@
 - [x] Collect() for testing: collects all emitted DataFrames into a list
 
 #### Phase 2: External Sources ✅
-- [x] KafkaSource: consumer group, JSON deserialization, manual offset tracking (PandaSharp.Streaming.Kafka)
+- [x] KafkaSource: consumer group, JSON deserialization, manual offset tracking (Cortex.Streaming.Kafka)
 - [x] KafkaSink: produce DataFrame rows as JSON messages to Kafka topics
-- [x] RedisSource: Redis Streams XREAD/XREADGROUP with consumer groups (PandaSharp.Streaming.Redis)
+- [x] RedisSource: Redis Streams XREAD/XREADGROUP with consumer groups (Cortex.Streaming.Redis)
 - [x] RedisSink: XADD DataFrame rows to Redis Streams with optional maxLen
 - [x] WebSocketSource: real-time WebSocket event ingestion (System.Net.WebSockets, JSON parsing, auto-timestamp)
 - [x] Exactly-once semantics via Kafka manual offset commit after processing
 
-### PandaSharp.Geo — Geospatial Operations
+### Cortex.Geo — Geospatial Operations
 
 #### Phase 1: Core Engine ✅
 - [x] GeoPoint record, BoundingBox with Contains/Intersects
@@ -294,15 +294,15 @@
 #### Phase 3: Advanced (Planned)
 - [x] Coordinate system reprojection via ProjNet: Reproject(source, target), EPSG codes, WGS84/WebMercator/UTM built-in
 
-### PandaSharp.Distributed — Parallel & Distributed Compute (Planned)
+### Cortex.Distributed — Parallel & Distributed Compute (Planned)
 - [x] Phase 1: Local parallelism — ParallelFilter (1.6x on 100K rows), ParallelApply, ParallelWhere, ParallelAdd/Multiply, ParallelSum
 - [x] Phase 2: Out-of-core via SpilledDataFrame — df.Spill(path), lazy column loading, eviction, Select/Filter to new spill, auto-cleanup
-- [x] Phase 3: Distributed via Arrow Flight RPC (PandaSharp.Flight — get/put/list DataFrames over gRPC)
+- [x] Phase 3: Distributed via Arrow Flight RPC (Cortex.Flight — get/put/list DataFrames over gRPC)
 - [x] Hash/range partitioning: df.Partition(n), df.HashPartition(col, n), ParallelGroupBy/Filter/Where/Map, auto-tune to core count
 - [x] Partitioned Parquet (Hive-style): ReadPartitioned, WritePartitioned with multi-level key=value directories
-- [x] Cloud storage adapters: S3Storage, AzureStorage, GcsStorage with auto-format DataFrame read/write (PandaSharp.Cloud)
+- [x] Cloud storage adapters: S3Storage, AzureStorage, GcsStorage with auto-format DataFrame read/write (Cortex.Cloud)
 
-### PandaSharp.ML.Models — Classical ML Algorithms
+### Cortex.ML.Models — Classical ML Algorithms
 
 #### Linear Models
 
@@ -351,7 +351,7 @@
 - [x] LearningCurve: train/val score vs training set size (returns DataFrame for plotting)
 - [x] ConfusionMatrixDisplay: confusion matrix → DataFrame for Viz heatmap
 
-### PandaSharp.TimeSeries — Forecasting & Analysis
+### Cortex.TimeSeries — Forecasting & Analysis
 
 #### Statistical Models
 
@@ -390,7 +390,7 @@
 - [x] FourierFeatures transformer: sin/cos components for seasonal modeling
 
 
-### PandaSharp.Text — NLP Pipeline
+### Cortex.Text — NLP Pipeline
 
 #### Tokenization
 
@@ -426,7 +426,7 @@
 - [x] DocumentSimilarityMatrix: TF-IDF or embedding cosine sim → DataFrame/heatmap
 
 
-### PandaSharp.Vision — Image & Video Processing
+### Cortex.Vision — Image & Video Processing
 
 #### Core
 
@@ -478,19 +478,19 @@
 - [x] ImageViz.ShowAugmentations (side-by-side augmentation results)
 
 
-### PandaSharp.SafeTensors — HuggingFace Weight Loading
+### Cortex.SafeTensors — HuggingFace Weight Loading
 
 - [x] SafeTensorReader: parse header JSON + memory-map tensor data
 - [x] SafeTensorReader.Open(path) / Open(stream)
 - [x] GetTensorNames() → string[]
 - [x] GetTensor<T>(name) → Tensor<T> (zero-copy via memory-mapped span)
 - [x] GetMetadata() → Dictionary<string, string>
-- [x] SafeTensorWriter: create SafeTensors files from PandaSharp Tensor<T>
+- [x] SafeTensorWriter: create SafeTensors files from Cortex Tensor<T>
 - [x] Support dtypes: float16, float32, float64, int32, int64, bfloat16 (read as float32)
 - [x] TorchSharp integration: LoadSafeTensors(path) → populate TorchSharp module parameters
 
 
-### PandaSharp.ML Review Fixes (from Code Review 2 & 3)
+### Cortex.ML Review Fixes (from Code Review 2 & 3)
 ### Review 2 — Carried Forward
 
 - [x] OnnxScorer: replace Convert.ToSingle(col.GetObject(r)) with TypeHelpers fast path (Predict line 50, PredictBatched line 91)
@@ -529,9 +529,9 @@
 - [x] PartialSort/ComputeNumericAggregate/GetGroupDoubles boxing elimination (typed fast paths)
 
 ### TODO: Test Coverage (from Code Review)
-- [x] Tests for PandaSharp.ML.Models (21 tests — LinearRegression, LogisticRegression, DecisionTree, RandomForest, KNN, KMeans, PCA, ElasticNet, CrossVal, null guards, dimension mismatch)
-- [x] Tests for PandaSharp.TimeSeries (23 tests — SMA, ETS, ARIMA, AutoARIMA, SeasonalDecompose, ACF, ADF/KPSS, Periodogram, Features, Changepoint, Backtesting, null guards)
-- [x] Tests for PandaSharp.Text (27 tests — all tokenizers, preprocessors, CosineSimilarity, SemanticSearch, TextColumnAccessor, null guards)
-- [x] Tests for PandaSharp.SafeTensors (7 tests — round-trip float/double, multiple tensors, metadata, GetTensorNames, null guards)
-- [x] Tests for PandaSharp.Vision (19 tests — ImageTensor, all transforms, pipeline composition, builder API)
+- [x] Tests for Cortex.ML.Models (21 tests — LinearRegression, LogisticRegression, DecisionTree, RandomForest, KNN, KMeans, PCA, ElasticNet, CrossVal, null guards, dimension mismatch)
+- [x] Tests for Cortex.TimeSeries (23 tests — SMA, ETS, ARIMA, AutoARIMA, SeasonalDecompose, ACF, ADF/KPSS, Periodogram, Features, Changepoint, Backtesting, null guards)
+- [x] Tests for Cortex.Text (27 tests — all tokenizers, preprocessors, CosineSimilarity, SemanticSearch, TextColumnAccessor, null guards)
+- [x] Tests for Cortex.SafeTensors (7 tests — round-trip float/double, multiple tensors, metadata, GetTensorNames, null guards)
+- [x] Tests for Cortex.Vision (19 tests — ImageTensor, all transforms, pipeline composition, builder API)
 

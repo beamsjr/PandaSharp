@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cortex.Viz</RootNamespace>
+    <PackageId>Cortex.Viz</PackageId>
+    <Description>Interactive D3.js visualizations for Cortex DataFrames</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>visualization;charts;d3;dataframe;interactive</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PuppeteerSharp" Version="24.40.0" />
+  </ItemGroup>
+
+</Project>

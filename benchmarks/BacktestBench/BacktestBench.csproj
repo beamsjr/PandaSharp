@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\PandaSharp\PandaSharp.csproj" />
-    <ProjectReference Include="..\..\src\PandaSharp.Viz\PandaSharp.Viz.csproj" />
+    <ProjectReference Include="..\..\src\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\..\src\Cortex.Viz\Cortex.Viz.csproj" />
   </ItemGroup>
 </Project>

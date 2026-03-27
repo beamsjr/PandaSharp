@@ -1,4 +1,4 @@
-# PandaSharp
+# Cortex
 
 A high-performance, pandas-like DataFrame library for .NET — the first complete data platform native to C#.
 
@@ -8,25 +8,25 @@ A high-performance, pandas-like DataFrame library for .NET — the first complet
 
 | Package | Description |
 |---------|-------------|
-| **PandaSharp** | Core DataFrame — Arrow storage, SIMD arithmetic, lazy eval, I/O, profiling |
-| **PandaSharp.ML** | Tensors, transformers, cross-validation, metrics |
-| **PandaSharp.ML.MLNet** | ML.NET IDataView bridge |
-| **PandaSharp.ML.Torch** | TorchSharp tensor bridge |
-| **PandaSharp.ML.Onnx** | ONNX Runtime inference |
-| **PandaSharp.IO.Database** | SQL push-down, lazy DB scans, connection pooling |
-| **PandaSharp.Viz** | Interactive Plotly.js charts + PNG/SVG export |
-| **PandaSharp.Streaming** | Real-time event processing with windowed aggregation |
-| **PandaSharp.Streaming.Kafka** | Kafka consumer/producer integration |
-| **PandaSharp.Streaming.Redis** | Redis Streams source/sink |
-| **PandaSharp.Geo** | Geospatial — R-tree index, polygon geometry, GeoParquet, reprojection |
-| **PandaSharp.Cloud** | S3, Azure Blob, GCS storage adapters |
-| **PandaSharp.Flight** | Arrow Flight RPC for distributed transport |
+| **Cortex** | Core DataFrame — Arrow storage, SIMD arithmetic, lazy eval, I/O, profiling |
+| **Cortex.ML** | Tensors, transformers, cross-validation, metrics |
+| **Cortex.ML.MLNet** | ML.NET IDataView bridge |
+| **Cortex.ML.Torch** | TorchSharp tensor bridge |
+| **Cortex.ML.Onnx** | ONNX Runtime inference |
+| **Cortex.IO.Database** | SQL push-down, lazy DB scans, connection pooling |
+| **Cortex.Viz** | Interactive Plotly.js charts + PNG/SVG export |
+| **Cortex.Streaming** | Real-time event processing with windowed aggregation |
+| **Cortex.Streaming.Kafka** | Kafka consumer/producer integration |
+| **Cortex.Streaming.Redis** | Redis Streams source/sink |
+| **Cortex.Geo** | Geospatial — R-tree index, polygon geometry, GeoParquet, reprojection |
+| **Cortex.Cloud** | S3, Azure Blob, GCS storage adapters |
+| **Cortex.Flight** | Arrow Flight RPC for distributed transport |
 
 ## Quick Start
 
 ```csharp
-using PandaSharp;
-using PandaSharp.Column;
+using Cortex;
+using Cortex.Column;
 
 var df = DataFrame.FromDictionary(new() {
     ["Name"] = new string?[] { "Alice", "Bob", "Charlie", "Diana" },
@@ -87,7 +87,7 @@ var result = scanner.Lazy()
 ## Visualization
 
 ```csharp
-using PandaSharp.Viz;
+using Cortex.Viz;
 
 // Interactive Plotly.js charts
 df.Viz().Bar("Month", "Revenue").Title("Sales").ToHtml("chart.html");
@@ -98,7 +98,7 @@ df.Viz().Histogram("Price").ToHtml("dist.html");
 ## Machine Learning
 
 ```csharp
-using PandaSharp.ML;
+using Cortex.ML;
 
 // Train/test split
 var (train, test) = DataSplitting.TrainTestSplit(df, testFraction: 0.2);
@@ -115,7 +115,7 @@ var result = tensor.MatMul(weights);
 ## Streaming
 
 ```csharp
-using PandaSharp.Streaming;
+using Cortex.Streaming;
 
 StreamFrame.From(new WebSocketSource("ws://localhost:8080/events"))
     .Window(new TumblingWindow(TimeSpan.FromMinutes(5)))
@@ -128,7 +128,7 @@ StreamFrame.From(new WebSocketSource("ws://localhost:8080/events"))
 ## Geospatial
 
 ```csharp
-using PandaSharp.Geo;
+using Cortex.Geo;
 
 var geo = df.ToGeoColumn("lat", "lon");
 var nearby = geo.WithinDistance(new GeoPoint(40.7128, -74.0060), radiusKm: 50);
@@ -140,7 +140,7 @@ var utm = geo.Reproject(Crs.Wgs84, Crs.Utm(18));
 
 ## Performance
 
-| Operation | PandaSharp | Notes |
+| Operation | Cortex | Notes |
 |-----------|-----------|-------|
 | Sum (100K doubles) | 31 us | SIMD, **zero allocation** |
 | Filter (100K rows) | 202 us | Boolean mask, branchless |
@@ -155,19 +155,19 @@ var utm = geo.Reproject(Crs.Wgs84, Crs.Utm(18));
 
 ```bash
 # Core DataFrame operations
-dotnet run --project samples/PandaSharp.Samples
+dotnet run --project samples/Cortex.Samples
 
 # Interactive charts (opens in browser)
-dotnet run --project samples/PandaSharp.Samples.Viz
+dotnet run --project samples/Cortex.Samples.Viz
 
 # Database with SQLite
-dotnet run --project samples/PandaSharp.Samples.Database
+dotnet run --project samples/Cortex.Samples.Database
 
 # Database with PostgreSQL
-dotnet run --project samples/PandaSharp.Samples.Postgres -- "Host=localhost;Username=postgres;Password=xxx;Database=postgres"
+dotnet run --project samples/Cortex.Samples.Postgres -- "Host=localhost;Username=postgres;Password=xxx;Database=postgres"
 
 # Machine learning pipeline
-dotnet run --project samples/PandaSharp.Samples.ML
+dotnet run --project samples/Cortex.Samples.ML
 ```
 
 ## Building
@@ -175,7 +175,7 @@ dotnet run --project samples/PandaSharp.Samples.ML
 ```bash
 dotnet build
 dotnet test
-dotnet run --project tests/PandaSharp.Tests.Benchmarks -c Release
+dotnet run --project tests/Cortex.Tests.Benchmarks -c Release
 ```
 
 ## License
