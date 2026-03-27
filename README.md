@@ -1,26 +1,46 @@
 # Cortex
 
-A high-performance, pandas-like DataFrame library for .NET — the first complete data platform native to C#.
+A high-performance data science platform for .NET — DataFrame, ML, GPU, Vision, NLP, Time Series, and more.
 
-**1,246 tests | 15 libraries | Arrow-backed | SIMD-accelerated | .NET 10**
+**2,344 tests | 20 packages | Arrow-backed | SIMD + BLAS + GPU accelerated | .NET 10**
+
+[![Build](https://github.com/beamsjr/PandaSharp/actions/workflows/build-test.yml/badge.svg)](https://github.com/beamsjr/PandaSharp/actions/workflows/build-test.yml)
+
+## Install
+
+```bash
+dotnet add package Cortex           # Core DataFrame
+dotnet add package Cortex.ML        # Machine Learning
+dotnet add package Cortex.GPU       # GPU Acceleration
+dotnet add package Cortex.Vision    # Image/Video Processing
+dotnet add package Cortex.Text      # NLP Pipeline
+dotnet add package Cortex.TimeSeries # Forecasting
+```
 
 ## The Ecosystem
 
 | Package | Description |
 |---------|-------------|
-| **Cortex** | Core DataFrame — Arrow storage, SIMD arithmetic, lazy eval, I/O, profiling |
-| **Cortex.ML** | Tensors, transformers, cross-validation, metrics |
+| **Cortex** | Core DataFrame — Arrow storage, SIMD arithmetic, lazy eval, CSV/Parquet/JSON/Avro/ORC I/O |
+| **Cortex.ML** | 25+ models (Linear, Trees, KNN, KMeans, PCA, t-SNE), transformers, metrics, BLAS/LAPACK |
+| **Cortex.ML.Torch** | TorchSharp GPU training, neural networks, SafeTensors loading |
 | **Cortex.ML.MLNet** | ML.NET IDataView bridge |
-| **Cortex.ML.Torch** | TorchSharp tensor bridge |
-| **Cortex.ML.Onnx** | ONNX Runtime inference |
-| **Cortex.IO.Database** | SQL push-down, lazy DB scans, connection pooling |
-| **Cortex.Viz** | Interactive Plotly.js charts + PNG/SVG export |
+| **Cortex.ML.Onnx** | ONNX Runtime model inference |
+| **Cortex.GPU** | ILGPU-based GPU acceleration — CUDA, OpenCL, CPU fallback |
+| **Cortex.Vision** | Image transforms, ONNX classifiers/embedders, video decode (FFmpeg + Apple AVFoundation) |
+| **Cortex.Text** | Tokenizers (BPE, WordPiece), stemming, embeddings, Levenshtein, Jaro-Winkler |
+| **Cortex.TimeSeries** | ARIMA, SARIMA, Holt-Winters, AutoARIMA, seasonal decomposition, ACF/PACF |
+| **Cortex.SafeTensors** | HuggingFace SafeTensors format — memory-mapped reader/writer |
+| **Cortex.Viz** | Plotly.js charts, StoryBoard narrative reports, PNG/SVG export |
+| **Cortex.Plot** | ScottPlot charting integration |
+| **Cortex.Interactive** | Jupyter/Polyglot notebooks, `DataFrame.Explore()` web UI |
+| **Cortex.Geo** | R-tree spatial index, Haversine distance, coordinate transforms, GeoParquet |
+| **Cortex.IO.Database** | SQL push-down, lazy DB scans (Postgres, SQL Server, SQLite, MySQL) |
 | **Cortex.Streaming** | Real-time event processing with windowed aggregation |
-| **Cortex.Streaming.Kafka** | Kafka consumer/producer integration |
-| **Cortex.Streaming.Redis** | Redis Streams source/sink |
-| **Cortex.Geo** | Geospatial — R-tree index, polygon geometry, GeoParquet, reprojection |
-| **Cortex.Cloud** | S3, Azure Blob, GCS storage adapters |
-| **Cortex.Flight** | Arrow Flight RPC for distributed transport |
+| **Cortex.Streaming.Kafka** | Apache Kafka connector |
+| **Cortex.Streaming.Redis** | Redis Streams connector |
+| **Cortex.Cloud** | S3, Azure Blob, GCS storage with retry + circuit breaker |
+| **Cortex.Flight** | Apache Arrow Flight RPC |
 
 ## Quick Start
 
@@ -29,153 +49,148 @@ using Cortex;
 using Cortex.Column;
 
 var df = DataFrame.FromDictionary(new() {
-    ["Name"] = new string?[] { "Alice", "Bob", "Charlie", "Diana" },
-    ["Age"] = new int[] { 25, 30, 35, 28 },
-    ["Salary"] = new double[] { 50_000, 62_000, 75_000, 58_000 }
+    ["Name"]   = new[] { "Alice", "Bob", "Charlie", "Diana" },
+    ["Age"]    = new[] { 25, 30, 35, 28 },
+    ["Salary"] = new[] { 50_000.0, 62_000, 75_000, 58_000 }
 });
 
+// Boolean indexing
+var senior = df[df["Age"].Gt(28)];
+
+// Arithmetic operators
+var bonus = df.GetColumn<double>("Salary") * 0.1;
+
+// GroupBy with multi-column aggregation
+var stats = df.GroupBy("Department")
+    .Agg(("Salary", AggFunc.Mean), ("Salary", AggFunc.Max));
+
+// Method chaining
+var result = df.Pipe(Normalize).Pipe(Encode).Pipe(Split);
+
 Console.WriteLine(df);
-// ┌───┬─────────┬─────┬────────┐
-// │   │ Name    │ Age │ Salary │
-// ├───┼─────────┼─────┼────────┤
-// │ 0 │ Alice   │  25 │  50000 │
-// │ 1 │ Bob     │  30 │  62000 │
-// │ 2 │ Charlie │  35 │  75000 │
-// │ 3 │ Diana   │  28 │  58000 │
-// └───┴─────────┴─────┴────────┘
 ```
+
+## Performance vs Python
+
+Benchmarked on 14.7M rows (6,179 stocks), 50K ML samples. [Full results](benchmarks/).
+
+| Suite | vs Python | Highlights |
+|-------|-----------|------------|
+| **DataFrame** (20 categories) | **2.4x faster** | GroupBy 78x, Correlation 28x, String ops 11x |
+| **TimeSeries** (8 categories) | **131x faster** | Holt-Winters 699x, AutoARIMA 258x, ARIMA 33x |
+| **Text/NLP** (6 categories) | **7.5x faster** | Stemming 12x, Bigrams 2.4x |
+| **ML Models** (21 categories) | 0.9x | GBT 1.7x faster, LinearReg 3x (BLAS) |
 
 ## Core Operations
 
 ```csharp
-// Filter, Sort, Select
-var result = df.Eval("Salary > 55000");           // string expression filter
-var sorted = df.Sort("Salary", ascending: false);  // typed sort
-var top3 = df.Head(3);
+// Filter, Sort, Describe
+var filtered = df.Query("Salary > 55000");
+var sorted = df.Sort("Salary", ascending: false);
+var stats = df.Describe();  // count, mean, std, min, quartiles, max
 
-// GroupBy with typed accumulators
-var byDept = df.GroupBy("Department").Sum();
-
-// Joins (typed int fast path)
+// Joins
 var joined = orders.Join(customers, "CustomerId");
 
-// Lazy evaluation with optimizer
-var lazy = df.Lazy()
+// Lazy evaluation
+var result = df.Lazy()
     .Filter(Col("Age") > Lit(25))
     .Sort("Salary", ascending: false)
     .Select("Name", "Salary")
     .Head(10)
-    .Collect();  // compiles optimized plan, executes once
+    .Collect();
 ```
 
-## I/O — Read & Write Anything
+## I/O
 
 ```csharp
-// Auto-detect format from extension
-var df = DataFrameIO.Load("data.parquet");    // or .csv, .csv.gz, .json, .jsonl, .arrow, .xlsx
-df.Save("output.csv.gz");                      // gzip-compressed CSV
+// Auto-detect format
+var df = DataFrameIO.Load("data.parquet");  // .csv, .json, .arrow, .xlsx, .avro, .orc
+df.Save("output.csv.gz");                    // gzip-compressed
 
 // Database with SQL push-down
 var scanner = new DatabaseScanner(conn, "orders", new PostgresDialect());
 var result = scanner.Lazy()
     .Filter(Col("amount") > Lit(1000))
-    .Sort("amount", ascending: false)
     .Head(100)
-    .Collect();  // executes as single SQL query on the database
-```
-
-## Visualization
-
-```csharp
-using Cortex.Viz;
-
-// Interactive Plotly.js charts
-df.Viz().Bar("Month", "Revenue").Title("Sales").ToHtml("chart.html");
-df.Viz().Scatter("X", "Y").Title("Correlation").ToHtml("scatter.html");
-df.Viz().Histogram("Price").ToHtml("dist.html");
+    .Collect();  // single SQL query
 ```
 
 ## Machine Learning
 
 ```csharp
-using Cortex.ML;
+using Cortex.ML.Models;
+using Cortex.ML.Tensors;
 
-// Train/test split
-var (train, test) = DataSplitting.TrainTestSplit(df, testFraction: 0.2);
+var X = df.ToTensor<double>("Feature1", "Feature2", "Feature3");
+var y = df.ToTensor<double>("Target");
 
-// Feature pipeline
-var pipeline = new FeaturePipeline(new Imputer(ImputeStrategy.Mean), new StandardScaler());
-var scaled = pipeline.FitTransform(train.Select("Feature1", "Feature2"));
+// Train (uses BLAS/LAPACK when available)
+var model = new RandomForestRegressor(nEstimators: 100, maxDepth: 10);
+model.Fit(X, y);
 
-// Tensors with SIMD
-var tensor = df.ToTensor<double>("Col1", "Col2", "Col3");
-var result = tensor.MatMul(weights);
+var predictions = model.Predict(X_test);
+var r2 = model.Score(X_test, y_test);
+
+// GPU training with TorchSharp
+var nn = NeuralNetModels.CreateMLP(inputDim: 20, hiddenDims: [64, 32], outputDim: 1);
+var result = TorchTrainer.Train(nn, trainDf, features, "target",
+    torch.nn.MSELoss(), new TrainingConfig { Epochs = 50, Device = "auto" });
 ```
 
-## Streaming
+## Time Series
 
 ```csharp
-using Cortex.Streaming;
+using Cortex.TimeSeries.Models;
 
-StreamFrame.From(new WebSocketSource("ws://localhost:8080/events"))
-    .Window(new TumblingWindow(TimeSpan.FromMinutes(5)))
-    .Agg("price", AggType.Mean, "avg_price")
-    .Agg("volume", AggType.Sum, "total_volume")
-    .OnEmit(df => Console.WriteLine(df))
-    .Start();
+var model = new ARIMA(p: 2, d: 1, q: 1);
+model.Fit(historicalData);
+var forecast = model.Forecast(steps: 30);
+
+// Automatic model selection
+var auto = new AutoARIMA(maxP: 5, maxD: 2, maxQ: 5);
+auto.Fit(data);
 ```
 
-## Geospatial
+## Vision
 
 ```csharp
-using Cortex.Geo;
+using Cortex.Vision;
 
-var geo = df.ToGeoColumn("lat", "lon");
-var nearby = geo.WithinDistance(new GeoPoint(40.7128, -74.0060), radiusKm: 50);
-var nearest = RTree.Build(geo).Nearest(target);  // 63x faster than brute-force
-
-// Coordinate reprojection
-var utm = geo.Reproject(Crs.Wgs84, Crs.Utm(18));
+var images = ImageIO.LoadBatch(paths, resizeWidth: 224, resizeHeight: 224);
+var pipeline = new ImagePipeline()
+    .Add(new Resize(224, 224))
+    .Add(new Normalize(ImageNet.Mean, ImageNet.Std));
+var processed = pipeline.Transform(images);
 ```
 
-## Performance
+## GPU Acceleration
 
-| Operation | Cortex | Notes |
-|-----------|-----------|-------|
-| Sum (100K doubles) | 31 us | SIMD, **zero allocation** |
-| Filter (100K rows) | 202 us | Boolean mask, branchless |
-| Sort (100K rows) | 9.2 ms | Typed struct comparers |
-| Parquet read (100K) | 1.7 ms | Zero-boxing typed arrays |
-| Join (100K × 1K) | 196 us | Typed int hash join |
-| R-tree nearest (10K) | 1.5 us | 63x vs brute-force |
-| SQL generation | 377 ns | Full query plan |
-| Profile (100K × 3) | 39 ms | Stats + correlation + dedup |
+```csharp
+using Cortex.GPU;
 
-## Samples
-
-```bash
-# Core DataFrame operations
-dotnet run --project samples/Cortex.Samples
-
-# Interactive charts (opens in browser)
-dotnet run --project samples/Cortex.Samples.Viz
-
-# Database with SQLite
-dotnet run --project samples/Cortex.Samples.Database
-
-# Database with PostgreSQL
-dotnet run --project samples/Cortex.Samples.Postgres -- "Host=localhost;Username=postgres;Password=xxx;Database=postgres"
-
-# Machine learning pipeline
-dotnet run --project samples/Cortex.Samples.ML
+// Automatic device selection (CUDA > OpenCL > CPU)
+var corr = df.GpuCorr();
+var dist = X.GpuPairwiseDistances(Y);
+var product = A.GpuMatMul(B);
 ```
+
+## Architecture
+
+- **Arrow-backed columnar storage** with zero-copy slicing
+- **SIMD acceleration** via `Vector<T>` for bulk numeric operations
+- **Native C accelerators** (libpandasharp) for rolling windows, aggregations, string ops
+- **Apple Accelerate BLAS/LAPACK** for matrix operations (cblas_dgemm, dgesv, dgesvd)
+- **C++ std::nth_element** for O(n) quantile computation
+- **KD-tree** for O(K log N) nearest neighbor search
+- **ILGPU** for GPU-accelerated operations
+- **Dictionary-encoded strings** for O(K) categorical operations
 
 ## Building
 
 ```bash
 dotnet build
 dotnet test
-dotnet run --project tests/Cortex.Tests.Benchmarks -c Release
 ```
 
 ## License
