@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Cortex.Notebooks</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Cortex\Cortex.csproj" />
+    <ProjectReference Include="..\Cortex.ML\Cortex.ML.csproj" />
+    <ProjectReference Include="..\Cortex.Viz\Cortex.Viz.csproj" />
+    <ProjectReference Include="..\Cortex.Text\Cortex.Text.csproj" />
+    <ProjectReference Include="..\Cortex.TimeSeries\Cortex.TimeSeries.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.*" />
+  </ItemGroup>
+</Project>

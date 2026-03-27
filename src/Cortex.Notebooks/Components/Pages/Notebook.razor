@@ -1,0 +1,321 @@
+@page "/"
+@rendermode InteractiveServer
+@using Cortex.Notebooks.Models
+@using Cortex.Notebooks.Services
+@inject NotebookKernel Kernel
+@inject IJSRuntime JS
+
+<PageTitle>Cortex Notebooks</PageTitle>
+
+<div class="notebook-toolbar">
+    <div class="toolbar-group">
+        <button class="toolbar-btn" @onclick="AddCodeCell" title="Add Code Cell">
+            <span class="btn-icon">+</span> Code
+        </button>
+        <button class="toolbar-btn" @onclick="AddMarkdownCell" title="Add Markdown Cell">
+            <span class="btn-icon">+</span> Markdown
+        </button>
+        <span class="toolbar-separator"></span>
+        <button class="toolbar-btn toolbar-run" @onclick="RunAll" disabled="@_isRunningAll" title="Run All Cells">
+            @if (_isRunningAll)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <span class="btn-icon">&#9654;</span>
+            }
+            Run All
+        </button>
+        <button class="toolbar-btn" @onclick="ClearAllOutputs" title="Clear All Outputs">
+            Clear All
+        </button>
+        <button class="toolbar-btn toolbar-danger" @onclick="ResetKernel" title="Reset Kernel (clears all variables)">
+            Reset Kernel
+        </button>
+    </div>
+    <div class="toolbar-info">
+        <span class="kernel-status @(_isRunningAll ? "busy" : "idle")">
+            @(_isRunningAll ? "Busy" : "Idle")
+        </span>
+    </div>
+</div>
+
+<div class="notebook-cells">
+    @for (int i = 0; i < _cells.Count; i++)
+    {
+        var index = i;
+        var cell = _cells[i];
+        <div class="cell @(cell.Status == CellStatus.Running ? "cell-running" : "") @(cell.Status == CellStatus.Error ? "cell-error" : "") @(_focusedCellId == cell.Id ? "cell-focused" : "")"
+             @onclick="() => _focusedCellId = cell.Id">
+
+            <div class="cell-gutter">
+                @if (cell.Type == CellType.Code)
+                {
+                    <span class="execution-count" title="Execution count">
+                        [@(cell.ExecutionCount > 0 ? cell.ExecutionCount.ToString() : " ")]
+                    </span>
+                }
+                else
+                {
+                    <span class="cell-type-badge">MD</span>
+                }
+            </div>
+
+            <div class="cell-content">
+                <div class="cell-header">
+                    <div class="cell-actions">
+                        <button class="cell-action-btn run-btn" @onclick="() => RunCell(index)" disabled="@(cell.Status == CellStatus.Running)" title="Run (Shift+Enter)">
+                            @if (cell.Status == CellStatus.Running)
+                            {
+                                <span class="spinner-sm"></span>
+                            }
+                            else
+                            {
+                                <span>&#9654;</span>
+                            }
+                        </button>
+                        <button class="cell-action-btn" @onclick="() => MoveUp(index)" disabled="@(index == 0)" title="Move Up">&#9650;</button>
+                        <button class="cell-action-btn" @onclick="() => MoveDown(index)" disabled="@(index == _cells.Count - 1)" title="Move Down">&#9660;</button>
+                        <button class="cell-action-btn delete-btn" @onclick="() => DeleteCell(index)" title="Delete Cell">&#10005;</button>
+                    </div>
+                    @if (cell.ElapsedMs > 0)
+                    {
+                        <span class="cell-timing">@FormatTime(cell.ElapsedMs)</span>
+                    }
+                </div>
+
+                <div class="cell-editor-wrap">
+                    <textarea class="cell-editor @(cell.Type == CellType.Code ? "code-editor" : "markdown-editor")"
+                              @bind="cell.Source"
+                              @bind:event="oninput"
+                              @onkeydown="(e) => HandleKeyDown(e, index)"
+                              id="cell-@cell.Id"
+                              rows="@Math.Max(3, cell.Source.Split('\n').Length + 1)"
+                              placeholder="@(cell.Type == CellType.Code ? "// Enter C# code..." : "Enter markdown...")"
+                              spellcheck="false"></textarea>
+                </div>
+
+                @if (cell.Type == CellType.Markdown && cell.Status == CellStatus.Success && cell.HtmlOutput != null)
+                {
+                    <div class="cell-output markdown-output">
+                        @((MarkupString)cell.HtmlOutput)
+                    </div>
+                }
+                else if (cell.HtmlOutput != null)
+                {
+                    <div class="cell-output html-output">
+                        @((MarkupString)cell.HtmlOutput)
+                    </div>
+                }
+
+                @if (cell.Output != null)
+                {
+                    <div class="cell-output text-output">
+                        <pre>@cell.Output</pre>
+                    </div>
+                }
+
+                @if (cell.Error != null)
+                {
+                    <div class="cell-output error-output">
+                        <pre>@cell.Error</pre>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<div class="notebook-footer">
+    <button class="add-cell-btn" @onclick="AddCodeCell">+ Code Cell</button>
+    <button class="add-cell-btn" @onclick="AddMarkdownCell">+ Markdown Cell</button>
+</div>
+
+@code {
+    private List<NotebookCell> _cells = new();
+    private bool _isRunningAll;
+    private string? _focusedCellId;
+
+    protected override void OnInitialized()
+    {
+        // Start with one empty code cell
+        _cells.Add(new NotebookCell
+        {
+            Type = CellType.Code,
+            Source = "// Welcome to Cortex Notebooks!\n// Try: var df = DataFrame.FromDictionary(new() {\n//     [\"Name\"] = new[] { \"Alice\", \"Bob\", \"Charlie\" },\n//     [\"Score\"] = new[] { 95, 87, 92 }\n// });\n// df"
+        });
+    }
+
+    private void AddCodeCell()
+    {
+        _cells.Add(new NotebookCell { Type = CellType.Code });
+    }
+
+    private void AddMarkdownCell()
+    {
+        _cells.Add(new NotebookCell { Type = CellType.Markdown });
+    }
+
+    private void DeleteCell(int index)
+    {
+        if (_cells.Count > 1)
+            _cells.RemoveAt(index);
+    }
+
+    private void MoveUp(int index)
+    {
+        if (index > 0)
+            (_cells[index], _cells[index - 1]) = (_cells[index - 1], _cells[index]);
+    }
+
+    private void MoveDown(int index)
+    {
+        if (index < _cells.Count - 1)
+            (_cells[index], _cells[index + 1]) = (_cells[index + 1], _cells[index]);
+    }
+
+    private async Task RunCell(int index)
+    {
+        var cell = _cells[index];
+        if (string.IsNullOrWhiteSpace(cell.Source))
+            return;
+
+        cell.Status = CellStatus.Running;
+        cell.Output = null;
+        cell.HtmlOutput = null;
+        cell.Error = null;
+        StateHasChanged();
+
+        if (cell.Type == CellType.Markdown)
+        {
+            cell.HtmlOutput = RenderMarkdown(cell.Source);
+            cell.Status = CellStatus.Success;
+            cell.ExecutionCount++;
+            StateHasChanged();
+            return;
+        }
+
+        var result = await Kernel.ExecuteAsync(cell.Source);
+        cell.ExecutionCount = Kernel.ExecutionCount;
+        cell.ElapsedMs = result.ElapsedMs;
+        cell.Output = result.TextOutput;
+        cell.HtmlOutput = result.HtmlOutput;
+        cell.Error = result.Error;
+        cell.Status = result.IsSuccess ? CellStatus.Success : CellStatus.Error;
+        StateHasChanged();
+    }
+
+    private async Task RunAll()
+    {
+        _isRunningAll = true;
+        StateHasChanged();
+
+        for (int i = 0; i < _cells.Count; i++)
+        {
+            await RunCell(i);
+            if (_cells[i].Status == CellStatus.Error)
+                break;
+        }
+
+        _isRunningAll = false;
+        StateHasChanged();
+    }
+
+    private void ClearAllOutputs()
+    {
+        foreach (var cell in _cells)
+        {
+            cell.Output = null;
+            cell.HtmlOutput = null;
+            cell.Error = null;
+            cell.Status = CellStatus.Idle;
+            cell.ElapsedMs = 0;
+        }
+    }
+
+    private void ResetKernel()
+    {
+        Kernel.Reset();
+        ClearAllOutputs();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e, int index)
+    {
+        // Shift+Enter: Run cell and move to/create next
+        if (e.Key == "Enter" && e.ShiftKey)
+        {
+            await RunCell(index);
+            if (index == _cells.Count - 1)
+            {
+                AddCodeCell();
+            }
+            _focusedCellId = _cells[Math.Min(index + 1, _cells.Count - 1)].Id;
+            StateHasChanged();
+        }
+        // Ctrl+Enter: Run cell and stay
+        else if (e.Key == "Enter" && e.CtrlKey)
+        {
+            await RunCell(index);
+        }
+    }
+
+    private static string RenderMarkdown(string markdown)
+    {
+        // Simple markdown rendering — headings, bold, italic, code blocks, lists
+        var lines = markdown.Split('\n');
+        var sb = new System.Text.StringBuilder();
+        bool inCodeBlock = false;
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.TrimEnd('\r');
+
+            if (line.StartsWith("```"))
+            {
+                sb.AppendLine(inCodeBlock ? "</code></pre>" : "<pre><code>");
+                inCodeBlock = !inCodeBlock;
+                continue;
+            }
+
+            if (inCodeBlock)
+            {
+                sb.AppendLine(System.Net.WebUtility.HtmlEncode(line));
+                continue;
+            }
+
+            // Headings
+            if (line.StartsWith("### "))
+                sb.AppendLine($"<h3>{ProcessInline(line[4..])}</h3>");
+            else if (line.StartsWith("## "))
+                sb.AppendLine($"<h2>{ProcessInline(line[3..])}</h2>");
+            else if (line.StartsWith("# "))
+                sb.AppendLine($"<h1>{ProcessInline(line[2..])}</h1>");
+            else if (line.StartsWith("- ") || line.StartsWith("* "))
+                sb.AppendLine($"<li>{ProcessInline(line[2..])}</li>");
+            else if (string.IsNullOrWhiteSpace(line))
+                sb.AppendLine("<br/>");
+            else
+                sb.AppendLine($"<p>{ProcessInline(line)}</p>");
+        }
+
+        if (inCodeBlock) sb.AppendLine("</code></pre>");
+        return sb.ToString();
+    }
+
+    private static string ProcessInline(string text)
+    {
+        // Bold
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        // Italic
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\*(.+?)\*", "<em>$1</em>");
+        // Inline code
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"`(.+?)`", "<code>$1</code>");
+        return text;
+    }
+
+    private static string FormatTime(double ms)
+    {
+        return ms >= 1000 ? $"{ms / 1000:F1}s" : $"{ms:F0}ms";
+    }
+}
