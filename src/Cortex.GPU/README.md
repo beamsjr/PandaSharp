@@ -2,6 +2,10 @@
 
 ILGPU-based GPU acceleration for Cortex with CUDA, OpenCL, and CPU fallback.
 
+Part of the [Cortex](https://github.com/beamsjr/Cortex) data science ecosystem for .NET.
+
+> Requires .NET 10+ and the `Cortex` core package. GPU support requires CUDA or OpenCL drivers; falls back to CPU automatically.
+
 ## Features
 
 - **GPU-accelerated operations** — element-wise math, aggregations, and matrix ops on the GPU
@@ -32,6 +36,23 @@ var result = gpu.Accelerate(df)
 
 Console.WriteLine($"Sum: {result}");
 ```
+
+## GPU Matrix Operations
+
+```csharp
+// Automatic device selection (CUDA > OpenCL > CPU)
+var corr = df.GpuCorr();
+var dist = X.GpuPairwiseDistances(Y);
+var product = A.GpuMatMul(B);
+```
+
+## Related Packages
+
+| Package | Description |
+|---------|-------------|
+| **Cortex** | Core DataFrame (required) |
+| **Cortex.ML.Torch** | TorchSharp GPU training for neural networks |
+| **Cortex.ML** | Classical ML with BLAS acceleration |
 
 ## Links
 

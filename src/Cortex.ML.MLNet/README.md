@@ -2,6 +2,10 @@
 
 ML.NET integration bridge for Cortex, enabling seamless conversion between DataFrames and IDataView.
 
+Part of the [Cortex](https://github.com/beamsjr/Cortex) data science ecosystem for .NET.
+
+> Requires .NET 10+, `Cortex`, and `Microsoft.ML`.
+
 ## Features
 
 - **DataFrame to IDataView** conversion with automatic schema mapping
@@ -31,6 +35,22 @@ var pipeline = mlContext.Transforms.NormalizeMinMax("Features")
 
 var model = pipeline.Fit(dataView);
 ```
+
+## Round-Trip Conversion
+
+```csharp
+// Cortex → ML.NET → Cortex
+IDataView dataView = df.ToDataView(mlContext);
+var result = model.Transform(dataView);
+var resultDf = result.ToDataFrame();  // back to Cortex DataFrame
+```
+
+## Related Packages
+
+| Package | Description |
+|---------|-------------|
+| **Cortex** | Core DataFrame (required) |
+| **Cortex.ML** | Cortex-native ML models (alternative to ML.NET) |
 
 ## Links
 

@@ -2,6 +2,10 @@
 
 Redis Streams connector for Cortex Streaming.
 
+Part of the [Cortex](https://github.com/beamsjr/Cortex) data science ecosystem for .NET.
+
+> Requires .NET 10+, `Cortex`, and `Cortex.Streaming`.
+
 ## Features
 
 - **Redis Streams source** — consume stream entries as DataFrames
@@ -30,6 +34,14 @@ var stream = new DataFrameStream()
 
 await stream.StartAsync();
 ```
+
+## Related Packages
+
+| Package | Description |
+|---------|-------------|
+| **Cortex** | Core DataFrame (required) |
+| **Cortex.Streaming** | Streaming engine (required) |
+| **Cortex.Streaming.Kafka** | Apache Kafka connector |
 
 ## Links
 

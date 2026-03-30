@@ -2,7 +2,7 @@
 
 A high-performance data science platform for .NET — DataFrame, ML, GPU, Vision, NLP, Time Series, and more.
 
-**2,344 tests | 20 packages | Arrow-backed | SIMD + BLAS + GPU accelerated | .NET 10**
+**2,344 tests | 22 packages | Arrow-backed | SIMD + BLAS + GPU accelerated | .NET 10**
 
 [![Build](https://github.com/beamsjr/PandaSharp/actions/workflows/build-test.yml/badge.svg)](https://github.com/beamsjr/PandaSharp/actions/workflows/build-test.yml)
 
@@ -15,6 +15,7 @@ dotnet add package Cortex.GPU       # GPU Acceleration
 dotnet add package Cortex.Vision    # Image/Video Processing
 dotnet add package Cortex.Text      # NLP Pipeline
 dotnet add package Cortex.TimeSeries # Forecasting
+dotnet add package Cortex.Notebooks  # Interactive Notebook App
 ```
 
 ## The Ecosystem
@@ -41,6 +42,8 @@ dotnet add package Cortex.TimeSeries # Forecasting
 | **Cortex.Streaming.Redis** | Redis Streams connector |
 | **Cortex.Cloud** | S3, Azure Blob, GCS storage with retry + circuit breaker |
 | **Cortex.Flight** | Apache Arrow Flight RPC |
+| **Cortex.Notebooks** | Blazor notebook web app with C# scripting, Plotly viz, and AI chat |
+| **Cortex.MCP** | Model Context Protocol (MCP) server for AI-driven notebook interaction |
 
 ## Quick Start
 
@@ -174,6 +177,21 @@ var corr = df.GpuCorr();
 var dist = X.GpuPairwiseDistances(Y);
 var product = A.GpuMatMul(B);
 ```
+
+## Notebooks
+
+Cortex.Notebooks is a self-hosted Blazor web app for interactive C# data analysis — like Jupyter, but native .NET.
+
+```bash
+dotnet run --project src/Cortex.Notebooks
+```
+
+- Code cells with C# scripting (Roslyn) and full IntelliSense via Monaco editor
+- Inline Plotly chart rendering from Cortex.Viz
+- Markdown cells for documentation
+- AI chat panel for natural-language data exploration
+- SQLite-backed notebook persistence
+- MCP server (`Cortex.MCP`) for AI tools (Claude, etc.) to read/write/run notebook cells
 
 ## Architecture
 

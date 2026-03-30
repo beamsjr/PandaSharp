@@ -2,6 +2,10 @@
 
 Jupyter and Polyglot notebook support for Cortex with DataFrame.Explore() web UI.
 
+Part of the [Cortex](https://github.com/beamsjr/Cortex) data science ecosystem for .NET.
+
+> Requires .NET 10+ and the `Cortex` core package.
+
 ## Features
 
 - **Jupyter/Polyglot integration** — rich HTML rendering of DataFrames in notebooks
@@ -28,6 +32,14 @@ var df = DataFrame.ReadCsv("data.csv");
 df.Head(20)           // renders as a rich HTML table
 df.Explore()          // opens an interactive data explorer
 ```
+
+## Related Packages
+
+| Package | Description |
+|---------|-------------|
+| **Cortex** | Core DataFrame (required) |
+| **Cortex.Viz** | Plotly charts for inline notebook rendering |
+| **Cortex.Notebooks** | Standalone Blazor notebook app (alternative to Jupyter) |
 
 ## Links
 
